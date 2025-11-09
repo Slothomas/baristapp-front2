@@ -24,9 +24,12 @@ export default function PostJob() {
     e.preventDefault();
     if (!u) return toast.push("Debes iniciar sesión");
     if (u.role !== "cafe") return toast.push("Solo cafeterías pueden publicar");
+
     if (!title || !location || !startISO || !endISO || payCLP === "") {
       return toast.push("Completa los campos obligatorios");
     }
+
+    // NOTA: no enviamos 'active' porque el tipo lo omite; que el store defina el default.
     addJob({
       title,
       location,
@@ -36,27 +39,51 @@ export default function PostJob() {
       description,
       requirements,
       ownerId: u.id,
-      active: true,
     });
+
     toast.push("Vacante publicada");
-    nav("/app/jobs"); // redirige a la lista que verán baristas
+    nav("/app/jobs");
   }
 
   return (
     <AppLayout>
       <h1 className="text-2xl font-semibold mb-4">Publicar vacante</h1>
       <form onSubmit={onSubmit} className="grid gap-3 max-w-2xl">
-        <Input label="Título*" placeholder="Barista turno mañana" value={title} onChange={e=>setTitle(e.target.value)} required />
-        <Input label="Ubicación*" placeholder="Providencia" value={location} onChange={e=>setLocation(e.target.value)} required />
+        <Input
+          label="Título*"
+          placeholder="Barista turno mañana"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+        />
+        <Input
+          label="Ubicación*"
+          placeholder="Providencia"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          required
+        />
 
         <div className="grid md:grid-cols-2 gap-3">
           <label className="block space-y-1">
             <span className="text-sm text-gray-700">Inicio*</span>
-            <input type="datetime-local" className="w-full border rounded-lg p-2" value={startISO} onChange={e=>setStartISO(e.target.value)} required />
+            <input
+              type="datetime-local"
+              className="w-full border rounded-lg p-2"
+              value={startISO}
+              onChange={(e) => setStartISO(e.target.value)}
+              required
+            />
           </label>
           <label className="block space-y-1">
             <span className="text-sm text-gray-700">Fin*</span>
-            <input type="datetime-local" className="w-full border rounded-lg p-2" value={endISO} onChange={e=>setEndISO(e.target.value)} required />
+            <input
+              type="datetime-local"
+              className="w-full border rounded-lg p-2"
+              value={endISO}
+              onChange={(e) => setEndISO(e.target.value)}
+              required
+            />
           </label>
         </div>
 
@@ -68,24 +95,40 @@ export default function PostJob() {
             className="w-full border rounded-lg p-2"
             placeholder="45000"
             value={payCLP}
-            onChange={e=>setPayCLP(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+            onChange={(e) =>
+              setPayCLP(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))
+            }
             required
           />
         </label>
 
         <label className="block space-y-1">
           <span className="text-sm text-gray-700">Descripción</span>
-          <textarea rows={4} className="w-full border rounded-lg p-2" value={description} onChange={e=>setDescription(e.target.value)} placeholder="Tareas del turno, dress code, caja/espresso, etc." />
+          <textarea
+            rows={4}
+            className="w-full border rounded-lg p-2"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Tareas del turno, dress code, caja/espresso, etc."
+          />
         </label>
 
         <label className="block space-y-1">
           <span className="text-sm text-gray-700">Requisitos</span>
-          <textarea rows={3} className="w-full border rounded-lg p-2" value={requirements} onChange={e=>setRequirements(e.target.value)} placeholder="Certificados deseables, experiencia mínima..." />
+          <textarea
+            rows={3}
+            className="w-full border rounded-lg p-2"
+            value={requirements}
+            onChange={(e) => setRequirements(e.target.value)}
+            placeholder="Certificados deseables, experiencia mínima..."
+          />
         </label>
 
         <div className="flex gap-2">
           <Button type="submit">Publicar</Button>
-          <Button type="button" variant="secondary" onClick={()=>history.back()}>Cancelar</Button>
+          <Button type="button" variant="secondary" onClick={() => nav(-1)}>
+            Cancelar
+          </Button>
         </div>
       </form>
     </AppLayout>

@@ -9,10 +9,9 @@ import { useToast } from "../../components/Toast";
 import { useState } from "react";
 import { pushNotification } from "../../store/notifyStore";
 
-
 export default function ApplicationsByJob() {
   const { jobId } = useParams<{ jobId: string }>();
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0); // solo para forzar re-render
   const user = getUserMock();
   const toast = useToast();
 
@@ -76,37 +75,41 @@ export default function ApplicationsByJob() {
                 </div>
 
                 <div className="flex gap-2">
-                    <Link
-                      to={`/app/users/${a.userId}`}
-                      className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm hover:bg-gray-100"
-                    >
-                      Ver perfil
-                    </Link>
+                  <Link
+                    to={`/app/users/${a.userId}`}
+                    className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm hover:bg-gray-100"
+                  >
+                    Ver perfil
+                  </Link>
+
                   {a.status === "pendiente" && (
                     <>
                       <Button
-                        variant="success"
+                        variant="primary"
+                        className="bg-green-600 hover:bg-green-700 text-white"
                         onClick={() => {
                           updateApplicationStatus(a.id, "aceptado");
                           pushNotification({
                             message: `Postulación aceptada de ${a.userId}`,
                             type: "success",
                           });
-                          toast.push("Postulación aceptada ✅");
+                          toast.push("Postulación aceptada");
                           setTick((t) => t + 1);
                         }}
                       >
                         Aceptar
                       </Button>
+
                       <Button
-                        variant="danger"
+                        variant="secondary"
+                        className="bg-red-600 hover:bg-red-700 text-white"
                         onClick={() => {
                           updateApplicationStatus(a.id, "rechazado");
                           pushNotification({
                             message: `Postulación rechazada de ${a.userId}`,
                             type: "warning",
                           });
-                          toast.push("Postulación rechazada ❌");
+                          toast.push("Postulación rechazada");
                           setTick((t) => t + 1);
                         }}
                       >

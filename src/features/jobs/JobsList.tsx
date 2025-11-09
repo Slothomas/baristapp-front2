@@ -7,10 +7,15 @@ import { isApplied, addApplication } from "../../store/applyStore";
 import { listActiveJobs, type Job } from "../../store/jobsStore";
 import { getUserMock } from "../../api/auth";
 
-function fmtCLP(n: number) {
-  return n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+function fmtCLP(n?: number) {
+  const v = n ?? 0;
+  return v.toLocaleString("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  });
 }
-function fmtDT(iso: string) {
+function fmtDT(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);
   return d.toLocaleString("es-CL", { dateStyle: "medium", timeStyle: "short" });
@@ -36,11 +41,10 @@ export default function JobsList() {
 
   function apply(jobId: string) {
     if (!u) return toast.push("Debes iniciar sesión");
-    // 👇 CAMBIO 1: pasar userId
     if (isApplied(jobId, u.id)) return toast.push("Ya postulaste a esta vacante");
     addApplication(jobId, u.id);
     toast.push("Postulación enviada (demo)");
-    setVersion(v=>v+1);
+    setVersion((v) => v + 1);
   }
 
   return (
@@ -59,18 +63,20 @@ export default function JobsList() {
         <Card className="p-6 text-sm text-gray-700">No hay vacantes activas por ahora.</Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {visible.map(j => {
+          {visible.map((j) => {
             const applied = u ? isApplied(j.id, u.id) : false;
             return (
               <Card key={j.id} className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="font-medium">{j.title}</h2>
-                    <p className="text-sm text-gray-600">{j.location}</p>
+                    <p className="text-sm text-gray-600">{j.location ?? "—"}</p>
                     {j.description && <p className="text-sm mt-2">{j.description}</p>}
                   </div>
                   <div className="text-right">
-                    <div className="text-sm">{fmtDT(j.startISO)} — {fmtDT(j.endISO)}</div>
+                    <div className="text-sm">
+                      {fmtDT(j.startISO)} — {fmtDT(j.endISO)}
+                    </div>
                     <div className="font-semibold">{fmtCLP(j.payCLP)}</div>
                   </div>
                 </div>
@@ -78,7 +84,11 @@ export default function JobsList() {
                   <p className="text-xs text-gray-600 mt-2">Req: {j.requirements}</p>
                 )}
                 <div className="mt-4">
-                  <Button variant={applied ? "secondary" : "primary"} disabled={applied} onClick={() => apply(j.id)}>
+                  <Button
+                    variant={applied ? "secondary" : "primary"}
+                    disabled={applied}
+                    onClick={() => apply(j.id)}
+                  >
                     {applied ? "Postulado" : "Postular"}
                   </Button>
                 </div>
