@@ -1,99 +1,172 @@
-import { useEffect, useRef, useState } from "react";
-import { addCert, getCerts, removeCert, type Cert } from "../store/certStore";
+// src/components/CertificateUpload.tsx
+import { useEffect, useState } from "react";
+import { useToast } from "./Toast"; // Usamos el Toast
+import {
+  getCertificates,
+  uploadCertificate,
+  getCertificateDownloadUrl,
+  type ApiCertificate, // Importamos el tipo desde la API
+} from "../api/certificate";
 import Button from "./Button";
 
-export default function CertificateUpload() {
-  const [list, setList] = useState<Cert[]>([]);
-  const [name, setName] = useState("");
-  const fileRef = useRef<HTMLInputElement | null>(null);
+// 1. EL COMPONENTE AHORA NECESITA EL user_id
+interface Props {
+  userId: number;
+}
 
+// 2. Estado para los botones de descarga
+type DownloadStatus = { [key: number]: boolean };
+
+export default function CertificateUpload({ userId }: Props) {
+  const [list, setList] = useState<ApiCertificate[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileInputKey, setFileInputKey] = useState<string>("empty"); // Para resetear el input
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
+
+  const toast = useToast();
+
+  // 3. CARGAR LA LISTA DESDE LA API (no desde certStore)
   useEffect(() => {
-    setList(getCerts());
-  }, []);
-
-  function onFilePick(e: React.ChangeEvent<HTMLInputElement>) {
-    // solo pdf
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (f.type !== "application/pdf") {
-      alert("Solo se admiten archivos PDF.");
-      e.target.value = "";
+    // No hacer nada si no tenemos el userId
+    if (!userId) {
+      setIsLoading(false);
       return;
     }
-  }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const input = fileRef.current;
-    const f = input?.files?.[0];
-    if (!f) return alert("Selecciona un PDF");
-    if (!name.trim()) return alert("Escribe un nombre para el certificado");
+    async function fetchCertificates() {
+      setIsLoading(true);
+      try {
+        const data = await getCertificates(userId);
+        setList(data);
+      } catch (err: any) {
+        console.error("Error cargando certificados:", err);
+        toast.push(err.message || "No se pudo cargar la lista.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-    // leer pdf como dataURL (demo sin backend)
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const rd = new FileReader();
-      rd.onload = () => resolve(rd.result as string);
-      rd.onerror = (err) => reject(err);
-      rd.readAsDataURL(f);
-    });
+    fetchCertificates();
+  // ¡¡CAMBIO IMPORTANTE!! Se quitó 'toast' del array para evitar el bucle infinito.
+  }, [userId]);
 
-    addCert({ name, fileName: f.name, dataUrl });
-    setList(getCerts());
-    setName("");
-    if (input) input.value = "";
-  }
+  // 4. MANEJAR LA SELECCIÓN DE ARCHIVO
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
 
-  function del(id: string) {
-    if (!confirm("¿Eliminar este certificado?")) return;
-    removeCert(id);
-    setList(getCerts());
+    // Mantenemos tu validación de PDF (¡es buena!)
+    if (f.type !== "application/pdf") {
+      toast.push("Solo se admiten archivos PDF.");
+      e.target.value = "";
+      setSelectedFile(null);
+      return;
+    }
+    setSelectedFile(f);
+  };
+
+  // 5. SUBIR EL ARCHIVO A LA API (reemplaza tu onSubmit)
+  const onFileUpload = async () => {
+    if (!selectedFile) {
+      toast.push("Selecciona un PDF primero");
+      return;
+    }
+    if (!userId) {
+      toast.push("Error: No se ha identificado al usuario.");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Llamamos a la API
+      const newCert = await uploadCertificate(userId, selectedFile);
+
+      // Añadimos el nuevo certificado a la lista local (más rápido que recargar)
+      setList((currentList) => [...currentList, newCert]);
+      toast.push(`Certificado "${newCert.file_name_original}" subido.`);
+
+      // Limpiar el input
+      setSelectedFile(null);
+      setFileInputKey(`key-${Date.now()}`); // Forzar reseteo del input
+    } catch (err: any) {
+      console.error("Error subiendo:", err);
+      toast.push(err.message || "No se pudo subir el archivo.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // 6. MANEJAR LA DESCARGA (reemplaza tu "Ver")
+  const onFileDownload = async (cert: ApiCertificate) => {
+    setDownloadStatus((prev) => ({ ...prev, [cert.id]: true }));
+    try {
+      const { download_url } = await getCertificateDownloadUrl(cert.id);
+
+      // Abrir el enlace seguro en una nueva pestaña
+      window.open(download_url, "_blank");
+    } catch (err: any) {
+      console.error("Error descargando:", err);
+      toast.push(err.message || "No se pudo generar el enlace.");
+    } finally {
+      setDownloadStatus((prev) => ({ ...prev, [cert.id]: false }));
+    }
+  };
+
+  // 7. RENDER (Simplificado y conectado a la API)
+  if (!userId) {
+    return null; // No mostrar nada si no hay usuario
   }
 
   return (
     <div className="space-y-4">
-      <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-5">
+      {/* Formulario de subida (simplificado) */}
+      <div className="grid gap-3 md:grid-cols-3">
         <input
-          className="md:col-span-2 w-full border rounded-lg p-2"
-          placeholder="Nombre del certificado"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          ref={fileRef}
+          key={fileInputKey} // Truco para resetear
+          ref={null} // Ya no usamos ref
           type="file"
           accept="application/pdf"
-          onChange={onFilePick}
-          className="md:col-span-2 w-full border rounded-lg p-2"
+          onChange={onFileChange}
+          className="md:col-span-2 w-full border rounded-lg p-2 text-sm"
           required
         />
-        <Button type="submit" className="md:col-span-1">Subir PDF</Button>
-      </form>
+        <Button
+          type="button" // Ya no es un form submit
+          onClick={onFileUpload}
+          disabled={isUploading || !selectedFile}
+          className="md:col-span-1"
+        >
+          {isUploading ? "Subiendo..." : "Subir PDF"}
+        </Button>
+      </div>
 
-      {list.length === 0 ? (
+      {/* Lista de certificados */}
+      {isLoading ? (
+        <p className="text-sm text-gray-600">Cargando certificados...</p>
+      ) : list.length === 0 ? (
         <p className="text-sm text-gray-600">Aún no subes certificados.</p>
       ) : (
         <ul className="divide-y rounded-xl border bg-white">
           {list.map((c) => (
             <li key={c.id} className="p-3 flex items-center gap-3">
               <div className="flex-1">
-                <div className="font-medium">{c.name}</div>
-                <div className="text-xs text-gray-600">{c.fileName}</div>
+                {/* Usamos el nombre original, ya no hay "nombre" manual */}
+                <div className="font-medium">{c.file_name_original}</div>
+                <div className="text-xs text-gray-600">
+                  Subido: {new Date(c.uploaded_at).toLocaleDateString()}
+                </div>
               </div>
-              <a
-                href={c.dataUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm px-3 py-1 rounded-lg border hover:bg-gray-100"
-              >
-                Ver
-              </a>
               <button
-                onClick={() => del(c.id)}
-                className="text-sm px-3 py-1 rounded-lg border hover:bg-gray-100"
+                onClick={() => onFileDownload(c)}
+                disabled={downloadStatus[c.id]}
+                className="text-sm px-3 py-1 rounded-lg border hover:bg-gray-100 disabled:opacity-50"
               >
-                Eliminar
+                {downloadStatus[c.id] ? "..." : "Descargar"}
               </button>
+              {/* El botón de eliminar se quita, ya que no hicimos ese endpoint */}
             </li>
           ))}
         </ul>

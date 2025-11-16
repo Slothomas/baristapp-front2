@@ -301,17 +301,26 @@ export default function Profile() {
           )}
         </Card>
 
-        {/* Certificados (por ahora siguen siendo demo/front-only) */}
+{/* Certificados */}
         <div className="mt-8 space-y-3">
           <h2 className="text-xl font-semibold text-gray-800">
             Certificados (PDF)
           </h2>
           <p className="text-sm text-gray-600">
-            Sube tus certificados o diplomas. (Esta versión aún no guarda en
-            backend).
+            Sube tus certificados o diplomas en formato PDF.
           </p>
           <Card className="p-6 shadow-sm">
-            <CertificateUpload />
+            {/*
+              Renderiza el componente de certificados solo si 
+              ya tenemos el 'userId'.
+            */}
+            {userId ? (
+              <CertificateUpload userId={userId} />
+            ) : (
+              <p className="text-sm text-gray-500">
+                Cargando información de usuario...
+              </p>
+            )}
           </Card>
         </div>
       </div>
