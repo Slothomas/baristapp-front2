@@ -1,94 +1,92 @@
-import { signJWT, verifyJWT } from "../lib/jwt";
+import { http } from "./http";          // 👈 AQUÍ el cliente correcto
 import { sget, sset, sdel } from "../lib/secureStorage";
 
-type Role = "barista" | "cafe" | "academy" | "admin";
-type User = {
-  id: string;
-  name: string;
+// Roles disponibles (coinciden con tu UI)
+export type Role = "barista" | "cafe" | "academy" | "admin";
+
+export interface AuthUser {
+  id: number;
+  user: string;
   email: string;
-  role: Role;
-};
+  role?: string;
+  token?: string;
+}
 
 const AUTH_K = "auth.user.secure";
 const TOKEN_K = "auth.token.secure";
-const USERS_K = "users.store.secure";
 
-// base de datos
-const catalog: Record<string, User> = {
-  "barista@demo.cl": { id: "u-barista", name: "Barista Demo", email: "barista@demo.cl", role: "barista" },
-  "cafe@demo.cl":    { id: "u-cafe",    name: "Cafetería Demo", email: "cafe@demo.cl", role: "cafe" },
-  "academy@demo.cl": { id: "u-acad",    name: "Academia Demo", email: "academy@demo.cl", role: "academy" },
-  "admin@demo.cl":   { id: "u-admin",   name: "Administrador",  email: "admin@demo.cl", role: "admin" },
-};
+// ===========================================================
+// 🔹 REGISTRO — POST /users
+// ===========================================================
 
-// login
-export function loginMock(email: string, _password: string): User {
+export async function registerUser(payload: {
+  user: string;
+  email: string;
+  password: string;
+  clave?: string;   // aquí guardamos el ROL desde el front
+  is_active?: number;
+}) {
+  const res = await http.post("/users", {
+    ...payload,
+    is_active: payload.is_active ?? 1,
+  });
 
-  const usersRaw = localStorage.getItem(USERS_K);
-  const users = usersRaw ? (JSON.parse(usersRaw) as User[]) : [];
-  const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-
-  const u = user || catalog[email.toLowerCase()];
-  if (!u) throw new Error("Usuario o contraseña incorrectos");
-
-  // crear token
-  const token = signJWT(
-    { sub: u.id, role: u.role, name: u.name, email: u.email },
-    60 * 60 * 24
-  );
-
-  // guardar sesion segura
-  sset(AUTH_K, u);
-  sset(TOKEN_K, token);
-  return u;
+  return res.data;
 }
 
-// registro
-export function registerMock(input: { name: string; email: string; password: string; role: Role }) {
-  const usersRaw = localStorage.getItem(USERS_K);
-  const users = usersRaw ? (JSON.parse(usersRaw) as any[]) : [];
+// ===========================================================
+// 🔹 LOGIN — POST /login
+// ===========================================================
 
-  // verifica duplicado
-  if (users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
-    throw new Error("Ese correo ya está registrado");
-  }
+export async function loginUser(email: string, password: string) {
+  const res = await http.post("/login", { email, password });
 
-  const newUser: User & { password?: string } = {
-    id: `u-${crypto.randomUUID()}`,
-    name: input.name,
-    email: input.email.toLowerCase(),
-    role: input.role,
-    password: input.password,
-  };
+  const user: AuthUser = res.data.user;
+  const token: string = res.data.token;
 
-  users.push(newUser);
-  localStorage.setItem(USERS_K, JSON.stringify(users));
-
-  // crea token y deja sesion activa
-  const token = signJWT(
-    { sub: newUser.id, role: newUser.role, name: newUser.name, email: newUser.email },
-    60 * 60 * 24
-  );
-  sset(AUTH_K, newUser);
+  // Guardamos sesión segura
+  sset(AUTH_K, user);
   sset(TOKEN_K, token);
 
-  return newUser;
+  return user;
 }
 
-// el logout
-export function logoutMock() {
+// 👇 Alias para no romper imports antiguos que usaban loginMock
+export function loginMock(email: string, password: string) {
+  return loginUser(email, password);
+}
+
+// ===========================================================
+// 🔹 LOGOUT
+// ===========================================================
+
+export function logout() {
   sdel(AUTH_K);
   sdel(TOKEN_K);
 }
 
-// obtener usuario actual
-export function getUserMock(): User | null {
-  return sget<User>(AUTH_K);
+// ===========================================================
+// 🔹 OBTENER USUARIO ACTUAL
+// ===========================================================
+
+export function getCurrentUser(): AuthUser | null {
+  return sget<AuthUser>(AUTH_K);
 }
 
-// validar token
+// Alias de compatibilidad con código viejo (NavBar, Profile, etc.)
+export function getUserMock(): AuthUser | null {
+  return getCurrentUser();
+}
+
+export function logoutMock() {
+  logout();
+}
+
+// ===========================================================
+// 🔹 VALIDAR SESIÓN
+// ===========================================================
+
 export function isAuthed(): boolean {
   const token = sget<string>(TOKEN_K);
-  const valid = token ? !!verifyJWT(token) : false;
-  return !!getUserMock() && valid;
+  return !!token && !!getCurrentUser();
 }

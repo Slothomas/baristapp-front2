@@ -4,7 +4,7 @@ import Button from "../../components/Button";
 import Input from "../../components/Input";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { registerMock } from "../../api/auth";
+import { registerUser } from "../../api/auth";
 
 export default function Register() {
   const nav = useNavigate();
@@ -17,7 +17,7 @@ export default function Register() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
 
@@ -27,15 +27,31 @@ export default function Register() {
 
     setLoading(true);
     try {
-      registerMock({
-        name: form.name.trim(),
+      // payload mapeado al schema UserCreate del backend
+      const payload = {
+        user: form.name.trim(),                     // 👈 se llama "user" en el backend
         email: form.email.trim().toLowerCase(),
-        password: form.password, // en mock, se guarda plano
-        role: form.role as any,
-      });
-      nav("/app"); // entra directo a la app
+        password: form.password,
+        clave: form.role,                           // 👈 guardamos el rol en "clave"
+        is_active: 1,
+      };
+
+      console.log("Enviando registro al backend:", payload);
+      const res = await registerUser(payload);
+      console.log("Respuesta backend /users:", res);
+
+      // si todo ok, lo mandamos a login o directo a la app
+      // nav("/login");
+      nav("/app");
     } catch (e: any) {
-      setErr(e?.message || "No se pudo registrar");
+      console.error("Error al registrar usuario:", e);
+
+      const msgBackend =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "No se pudo registrar";
+
+      setErr(typeof msgBackend === "string" ? msgBackend : "No se pudo registrar");
       setLoading(false);
     }
   }
@@ -93,7 +109,9 @@ export default function Register() {
 
           <div className="mt-3 text-sm">
             ¿Ya tienes cuenta?{" "}
-            <Link to="/login" className="underline">Inicia sesión</Link>
+            <Link to="/login" className="underline">
+              Inicia sesión
+            </Link>
           </div>
         </Card>
       </div>

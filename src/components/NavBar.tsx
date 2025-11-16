@@ -44,7 +44,7 @@ export default function NavBar() {
 
           {user && (
             <span className="hidden sm:inline text-sm text-gray-600">
-              Hola, <b>{user.name}</b>
+              Hola, <b>{user.user}</b>
             </span>
           )}
 

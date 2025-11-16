@@ -4,9 +4,9 @@ import Button from "../../components/Button";
 import Card from "../../components/Card";
 import { useState, useEffect } from "react";
 import { useToast } from "../../components/Toast";
-import { getUserMock } from "../../api/auth";
+import { getUserMock } from "../../api/auth";   // sigue usando el alias de compat
 import CertificateUpload from "../../components/CertificateUpload";
-import { sget, sset } from "../../lib/secureStorage"; // 🔒 cifrado AES local
+import { sget, sset } from "../../lib/secureStorage";
 
 type ProfileData = {
   name: string;
@@ -22,14 +22,23 @@ const KEY = "profile.data.secure";
 export default function Profile() {
   const toast = useToast();
   const u = getUserMock();
+
+  // 🧠 Compatibilidad: si el usuario viene como { user: "..." } desde el backend
+  const initialName =
+    (u as any)?.name ?? (u as any)?.user ?? "";
+
+  const initialRole =
+    ((u as any)?.role as any) || "barista";
+
   const [form, setForm] = useState<ProfileData>({
-    name: u?.name || "",
-    role: (u?.role as any) || "barista",
+    name: initialName,
+    role: initialRole,
     avatar: undefined,
     years: 0,
     skills: [],
     bio: "",
   });
+
   const [errors, setErrors] = useState<{ name?: string }>();
 
   // cargar datos guardados

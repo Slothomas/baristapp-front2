@@ -1,7 +1,24 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../components/Layout";
+import { http } from "../api/http";
 
 export default function Home() {
+
+  useEffect(() => {
+    const probarApi = async () => {
+      try {
+        const res = await http.get("/miapp");
+        console.log("Respuesta /miapp:", res.data);
+      } catch (error) {
+        console.error("Error llamando /miapp:", error);
+      }
+    };
+
+    probarApi();
+
+    
+  }, []);
   return (
     <Layout>
       <section className="min-h-[72vh] grid place-items-center">
