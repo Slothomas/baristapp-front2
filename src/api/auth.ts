@@ -1,29 +1,28 @@
-import { http } from "./http";          // 👈 AQUÍ el cliente correcto
+import { http } from "./http";
 import { sget, sset, sdel } from "../lib/secureStorage";
 
-// Roles disponibles (coinciden con tu UI)
 export type Role = "barista" | "cafe" | "academy" | "admin";
 
 export interface AuthUser {
-  id: number;
-  user: string;
+  id: string;      // lo que usa el front en todas partes
+  name: string;    // usado por Navbar, Dashboard, Profile
   email: string;
   role?: string;
   token?: string;
+  user?: string;   // opcional, por compatibilidad
 }
 
 const AUTH_K = "auth.user.secure";
 const TOKEN_K = "auth.token.secure";
 
 // ===========================================================
-// 🔹 REGISTRO — POST /users
+// REGISTRO  → POST /users
 // ===========================================================
-
 export async function registerUser(payload: {
   user: string;
   email: string;
   password: string;
-  clave?: string;   // aquí guardamos el ROL desde el front
+  clave?: string;
   is_active?: number;
 }) {
   const res = await http.post("/users", {
@@ -31,49 +30,61 @@ export async function registerUser(payload: {
     is_active: payload.is_active ?? 1,
   });
 
-  return res.data;
+  return res.data; // la respuesta viene en formato UserResponse
 }
 
 // ===========================================================
-// 🔹 LOGIN — POST /login
+// LOGIN  → POST /login
+// Backend espera: { user: string, password: string }
+// Respuesta: { success, message, user_id, email, user }
 // ===========================================================
-
 export async function loginUser(email: string, password: string) {
-  const res = await http.post("/login", { email, password });
+  // 👇 OJO: el backend espera "user", no "email"
+  const res = await http.post("/login", {
+    user: email,
+    password: password,
+  });
 
-  const user: AuthUser = res.data.user;
-  const token: string = res.data.token;
+  const raw = res.data; // LoginResponse
 
-  // Guardamos sesión segura
+  const user: AuthUser = {
+    id: String(raw.user_id),
+    name: raw.user,
+    email: raw.email,
+    role: undefined,
+  };
+
+  // Por ahora el backend no devuelve token.
+  // Guardamos un token dummy para que isAuthed() funcione.
+  const token = "dummy-token";
+
   sset(AUTH_K, user);
   sset(TOKEN_K, token);
 
   return user;
 }
 
-// 👇 Alias para no romper imports antiguos que usaban loginMock
+// Alias para mantener compatibilidad con código viejo
 export function loginMock(email: string, password: string) {
   return loginUser(email, password);
 }
 
 // ===========================================================
-// 🔹 LOGOUT
+// LOGOUT
 // ===========================================================
-
 export function logout() {
   sdel(AUTH_K);
   sdel(TOKEN_K);
 }
 
 // ===========================================================
-// 🔹 OBTENER USUARIO ACTUAL
+// OBTENER USUARIO ACTUAL
 // ===========================================================
-
 export function getCurrentUser(): AuthUser | null {
   return sget<AuthUser>(AUTH_K);
 }
 
-// Alias de compatibilidad con código viejo (NavBar, Profile, etc.)
+// Alias de compatibilidad (Navbar, Profile, etc.)
 export function getUserMock(): AuthUser | null {
   return getCurrentUser();
 }
@@ -83,9 +94,8 @@ export function logoutMock() {
 }
 
 // ===========================================================
-// 🔹 VALIDAR SESIÓN
+// VALIDAR SESIÓN
 // ===========================================================
-
 export function isAuthed(): boolean {
   const token = sget<string>(TOKEN_K);
   return !!token && !!getCurrentUser();
