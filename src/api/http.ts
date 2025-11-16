@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: "https://baristappback-axg6grb2ahaffnby.canadacentral-01.azurewebsites.net"
 });
 
 http.interceptors.request.use((config) => {
