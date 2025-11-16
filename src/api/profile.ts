@@ -73,3 +73,26 @@ export async function upsertProfile(
   );
   return normalizeProfile(res.data);
 }
+
+// POST /users/{user_id}/avatar
+export async function uploadAvatar(
+  userId: number | string,
+  file: File
+): Promise<ApiProfile> {
+  
+  const formData = new FormData();
+  formData.append("file", file); // La key "file"
+
+  const res = await http.post<ApiProfileRaw>(
+    `/users/${userId}/avatar`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+
+  // Devuelve el perfil normalizado con la nueva URL del avatar
+  return normalizeProfile(res.data);
+}

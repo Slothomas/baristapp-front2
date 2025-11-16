@@ -9,7 +9,8 @@ import { getUserMock } from "../../api/auth";
 import CertificateUpload from "../../components/CertificateUpload";
 
 import { fetchUserByEmail, updateUserProfile } from "../../api/users";
-import { fetchProfile, upsertProfile } from "../../api/profile";
+// --- 1. Importa la nueva función 'uploadAvatar' ---
+import { fetchProfile, upsertProfile, uploadAvatar } from "../../api/profile";
 
 type ProfileRole = "barista" | "cafe" | "academy" | "admin";
 
@@ -41,6 +42,8 @@ export default function Profile() {
   const [errors, setErrors] = useState<{ name?: string }>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // --- 2. Añade un estado de "subiendo avatar" ---
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // =========================================================
   // Cargar datos desde backend: app_user + app_user_profile
@@ -107,18 +110,38 @@ export default function Profile() {
   }, [email, userId, toast]);
 
   // =========================================================
-  // Subir avatar (base64 por ahora)
+  // Subir avatar (¡AHORA CONECTADO AL BACKEND!)
   // =========================================================
-  function onAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const rd = new FileReader();
-    rd.onload = () =>
+    if (!file || !userId) return;
+
+    // Validar tipo de archivo (opcional, el backend también lo hace)
+    if (!file.type.startsWith("image/")) {
+      toast.push("Por favor, selecciona un archivo de imagen.");
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      // 1. Llama a la nueva función de la API
+      const updatedProfile = await uploadAvatar(userId, file);
+
+      // 2. Actualiza el estado local con la nueva URL del avatar
       setForm((f) => ({
         ...f,
-        avatar: rd.result as string,
+        avatar: updatedProfile.avatar_url ?? undefined,
       }));
-    rd.readAsDataURL(file);
+
+      toast.push("Avatar actualizado.");
+    } catch (err: any) {
+      console.error("Error subiendo avatar:", err);
+      toast.push(err.message || "No se pudo subir el avatar.");
+    } finally {
+      setIsUploadingAvatar(false);
+      // Limpiar el input para que se pueda volver a subir el mismo archivo
+      e.target.value = "";
+    }
   }
 
   // =========================================================
@@ -147,13 +170,16 @@ export default function Profile() {
       });
 
       // 2) Upsert en app_user_profile
+      // NOTA: El avatar ya no se envía aquí, se maneja por 'onAvatar'
+      // Lo dejamos para que el 'bio' o 'skills' se puedan guardar
+      // sin cambiar el avatar.
       await upsertProfile(userId, {
         full_name: form.name.trim(),
         bio: form.bio || undefined,
         years_experience:
           typeof form.years === "number" ? form.years : undefined,
         skills: form.skills ?? [],
-        avatar_url: form.avatar || undefined,
+        avatar_url: form.avatar || undefined, // Mantenemos la URL actual
       });
 
       toast.push("Perfil guardado correctamente");
@@ -180,7 +206,13 @@ export default function Profile() {
             <form onSubmit={onSubmit} className="grid gap-5">
               <div className="flex items-center gap-5">
                 <div className="h-24 w-24 rounded-full bg-gray-200 overflow-hidden grid place-items-center ring-2 ring-brand-500">
-                  {form.avatar ? (
+                  
+                  {/* --- 3. Añade un indicador de carga --- */}
+                  {isUploadingAvatar ? (
+                    <span className="text-xs text-gray-500 p-2 text-center">
+                      Cargando...
+                    </span>
+                  ) : form.avatar ? (
                     <img
                       src={form.avatar}
                       alt="avatar"
@@ -198,6 +230,8 @@ export default function Profile() {
                     type="file"
                     accept="image/*"
                     onChange={onAvatar}
+                    // Deshabilita el botón mientras se sube
+                    disabled={isUploadingAvatar}
                     className="text-sm"
                   />
                 </label>
@@ -301,7 +335,7 @@ export default function Profile() {
           )}
         </Card>
 
-{/* Certificados */}
+        {/* Certificados */}
         <div className="mt-8 space-y-3">
           <h2 className="text-xl font-semibold text-gray-800">
             Certificados (PDF)

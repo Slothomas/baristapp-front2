@@ -1,45 +1,86 @@
+// src/pages/support.tsx
 import { useState } from "react";
 import AppLayout from "../components/AppLayout";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import Button from "../components/Button";
-import { createTicket, type Ticket } from "../store/supportStore";
 import { getUserMock } from "../api/auth";
 import { useToast } from "../components/Toast";
+
+// --- 1. Importa la función de la API real ---
+import { sendSupportTicket } from "../api/support";
+// --- (Eliminamos la importación de 'supportStore') ---
+
+
+// --- 2. Definimos el tipo de categoría localmente ---
+type SupportCategory = "Técnico" | "Cuenta" | "Pagos" | "Sugerencia" | "Otro";
+
 
 export default function Support() {
   const user = getUserMock();
   const toast = useToast();
 
   const [subject, setSubject] = useState("");
-  const [category, setCategory] = useState<Ticket["category"]>("Técnico");
+  const [category, setCategory] = useState<SupportCategory>("Técnico");
   const [message, setMessage] = useState("");
-  const [ticketId, setTicketId] = useState<string | null>(null);
+  
+  // --- 3. Añadimos un estado de 'enviando' ---
+  const [isSending, setIsSending] = useState(false);
+  // --- (Eliminamos 'ticketId' porque ya no es relevante) ---
 
-  function submit(e: React.FormEvent) {
+
+  // --- 4. Esta es la función principal que cambia ---
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Validar que el usuario esté logueado
+    if (!user || !user.email) {
+      toast.push("Debes iniciar sesión para enviar un ticket de soporte.");
+      return;
+    }
+
+    // Validar campos
     if (!subject.trim() || !message.trim()) {
       toast.push("Completa asunto y mensaje");
       return;
     }
-    const t = createTicket({
-      userId: user?.id ?? null,
-      subject: subject.trim(),
-      category,
-      message: message.trim(),
-    });
-    setTicketId(t.id);
-    toast.push("Tu caso fue registrado");
-    setSubject("");
-    setCategory("Técnico");
-    setMessage("");
+
+    setIsSending(true);
+
+    try {
+      // Preparamos el mensaje para el backend.
+      // Incluimos la categoría y los datos del usuario en el cuerpo
+      // para que el admin de soporte tenga el contexto.
+      const fullMessage = `
+        Categoría: ${category}
+        Usuario: ${user.name} (ID: ${user.id}, Email: ${user.email})
+        ---------------------------------
+        ${message.trim()}
+      `;
+
+      // Llamamos a la API real
+      await sendSupportTicket({
+        user_email: user.email,
+        subject: subject.trim(),
+        message: fullMessage,
+      });
+
+      // Éxito
+      toast.push("Tu mensaje fue enviado. ¡Gracias!");
+      setSubject("");
+      setCategory("Técnico");
+      setMessage("");
+
+    } catch (err: any) {
+      console.error("Error enviando soporte:", err);
+      toast.push(err.message || "No se pudo enviar el mensaje.");
+    } finally {
+      setIsSending(false);
+    }
   }
 
-  const mailto = `mailto:soporte@baristapp.cl?subject=${encodeURIComponent(
-    `[BaristApp] ${subject || "Consulta/Soporte"}`
-  )}&body=${encodeURIComponent(
-    `Hola equipo BaristApp,\n\nCategoría: ${category}\nUsuario: ${user?.id ?? "anónimo"}\n\n${message}\n\nGracias.`
-  )}`;
+  // --- 5. Eliminamos la variable 'mailto' ---
+  // (Ya no es necesaria, el botón de 'Enviar a soporte' es el real)
 
   return (
     <AppLayout>
@@ -61,7 +102,7 @@ export default function Support() {
               <select
                 className="w-full border rounded-lg p-2"
                 value={category}
-                onChange={(e) => setCategory(e.target.value as Ticket["category"])}
+                onChange={(e) => setCategory(e.target.value as SupportCategory)}
               >
                 <option>Cuenta</option>
                 <option>Técnico</option>
@@ -83,21 +124,16 @@ export default function Support() {
               />
             </label>
 
+            {/* --- 6. Actualizamos los botones --- */}
             <div className="flex gap-2">
-              <Button type="submit">Enviar a soporte</Button>
-              <a
-                className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-100"
-                href={mailto}
-              >
-                Enviar por correo
-              </a>
+              <Button type="submit" disabled={isSending}>
+                {isSending ? "Enviando..." : "Enviar a soporte"}
+              </Button>
+              {/* Eliminamos el botón 'mailto' */}
             </div>
 
-            {ticketId && (
-              <div className="text-sm text-green-700 mt-2">
-                Caso creado: <b>{ticketId}</b> (guárdalo para seguimiento)
-              </div>
-            )}
+            {/* --- 7. Eliminamos el mensaje de 'ticketId' --- */}
+            
           </form>
         </Card>
 
