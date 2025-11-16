@@ -77,3 +77,19 @@ export async function getCertificateDownloadUrl(
   
   return res.data;
 }
+
+// ===========================================================
+// DELETE /certificates/{certificate_id}
+// (Desactiva un certificado - soft delete)
+// ===========================================================
+export async function deleteCertificate(
+  certificateId: number | string
+): Promise<void> {
+  
+  // El backend devuelve un 204 No Content, así que no esperamos
+  // datos de respuesta (por eso el Promise<void>)
+  await http.delete(`/certificates/${certificateId}`);
+  
+  // No hay nada que devolver
+  return;
+}

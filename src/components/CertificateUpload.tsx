@@ -1,41 +1,40 @@
 // src/components/CertificateUpload.tsx
 import { useEffect, useState } from "react";
-import { useToast } from "./Toast"; // Usamos el Toast
+import { useToast } from "./Toast";
 import {
   getCertificates,
   uploadCertificate,
   getCertificateDownloadUrl,
-  type ApiCertificate, // Importamos el tipo desde la API
+  deleteCertificate, // <-- 1. Importa la nueva función
+  type ApiCertificate,
 } from "../api/certificate";
 import Button from "./Button";
 
-// 1. EL COMPONENTE AHORA NECESITA EL user_id
 interface Props {
   userId: number;
 }
 
-// 2. Estado para los botones de descarga
 type DownloadStatus = { [key: number]: boolean };
+// 2. Añade estado para los botones de eliminar
+type DeleteStatus = { [key: number]: boolean };
 
 export default function CertificateUpload({ userId }: Props) {
   const [list, setList] = useState<ApiCertificate[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileInputKey, setFileInputKey] = useState<string>("empty"); // Para resetear el input
+  const [fileInputKey, setFileInputKey] = useState<string>("empty");
 
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({});
+  const [deleteStatus, setDeleteStatus] = useState<DeleteStatus>({}); // <-- 3. Inicializa el estado
 
   const toast = useToast();
 
-  // 3. CARGAR LA LISTA DESDE LA API (no desde certStore)
   useEffect(() => {
-    // No hacer nada si no tenemos el userId
     if (!userId) {
       setIsLoading(false);
       return;
     }
-
     async function fetchCertificates() {
       setIsLoading(true);
       try {
@@ -48,17 +47,13 @@ export default function CertificateUpload({ userId }: Props) {
         setIsLoading(false);
       }
     }
-
     fetchCertificates();
-  // ¡¡CAMBIO IMPORTANTE!! Se quitó 'toast' del array para evitar el bucle infinito.
-  }, [userId]);
+  }, [userId]); // 'toast' se quita para evitar bucles
 
-  // 4. MANEJAR LA SELECCIÓN DE ARCHIVO
+  // ... (onFileChange y onFileUpload se quedan igual) ...
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-
-    // Mantenemos tu validación de PDF (¡es buena!)
     if (f.type !== "application/pdf") {
       toast.push("Solo se admiten archivos PDF.");
       e.target.value = "";
@@ -68,7 +63,6 @@ export default function CertificateUpload({ userId }: Props) {
     setSelectedFile(f);
   };
 
-  // 5. SUBIR EL ARCHIVO A LA API (reemplaza tu onSubmit)
   const onFileUpload = async () => {
     if (!selectedFile) {
       toast.push("Selecciona un PDF primero");
@@ -78,19 +72,13 @@ export default function CertificateUpload({ userId }: Props) {
       toast.push("Error: No se ha identificado al usuario.");
       return;
     }
-
     setIsUploading(true);
     try {
-      // Llamamos a la API
       const newCert = await uploadCertificate(userId, selectedFile);
-
-      // Añadimos el nuevo certificado a la lista local (más rápido que recargar)
       setList((currentList) => [...currentList, newCert]);
       toast.push(`Certificado "${newCert.file_name_original}" subido.`);
-
-      // Limpiar el input
       setSelectedFile(null);
-      setFileInputKey(`key-${Date.now()}`); // Forzar reseteo del input
+      setFileInputKey(`key-${Date.now()}`);
     } catch (err: any) {
       console.error("Error subiendo:", err);
       toast.push(err.message || "No se pudo subir el archivo.");
@@ -99,13 +87,10 @@ export default function CertificateUpload({ userId }: Props) {
     }
   };
 
-  // 6. MANEJAR LA DESCARGA (reemplaza tu "Ver")
   const onFileDownload = async (cert: ApiCertificate) => {
     setDownloadStatus((prev) => ({ ...prev, [cert.id]: true }));
     try {
       const { download_url } = await getCertificateDownloadUrl(cert.id);
-
-      // Abrir el enlace seguro en una nueva pestaña
       window.open(download_url, "_blank");
     } catch (err: any) {
       console.error("Error descargando:", err);
@@ -115,18 +100,45 @@ export default function CertificateUpload({ userId }: Props) {
     }
   };
 
-  // 7. RENDER (Simplificado y conectado a la API)
+  // --- 4. AÑADE LA NUEVA FUNCIÓN DE BORRADO ---
+  const onFileDelete = async (certToDelete: ApiCertificate) => {
+    // Pedir confirmación
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar "${certToDelete.file_name_original}"?`)) {
+      return;
+    }
+
+    setDeleteStatus((prev) => ({ ...prev, [certToDelete.id]: true }));
+    try {
+      // Llamar a la API
+      await deleteCertificate(certToDelete.id);
+
+      // Eliminar el certificado de la lista en el estado local
+      setList((currentList) =>
+        currentList.filter((cert) => cert.id !== certToDelete.id)
+      );
+
+      toast.push("Certificado eliminado.");
+      
+    } catch (err: any) {
+      console.error("Error eliminando:", err);
+      toast.push(err.message || "No se pudo eliminar el certificado.");
+      // Volver a habilitar el botón si falla
+      setDeleteStatus((prev) => ({ ...prev, [certToDelete.id]: false }));
+    }
+    // No necesitamos un 'finally' porque el elemento desaparece
+  };
+
   if (!userId) {
-    return null; // No mostrar nada si no hay usuario
+    return null;
   }
 
   return (
     <div className="space-y-4">
-      {/* Formulario de subida (simplificado) */}
+      {/* Formulario de subida */}
       <div className="grid gap-3 md:grid-cols-3">
         <input
-          key={fileInputKey} // Truco para resetear
-          ref={null} // Ya no usamos ref
+          key={fileInputKey}
+          ref={null}
           type="file"
           accept="application/pdf"
           onChange={onFileChange}
@@ -134,7 +146,7 @@ export default function CertificateUpload({ userId }: Props) {
           required
         />
         <Button
-          type="button" // Ya no es un form submit
+          type="button"
           onClick={onFileUpload}
           disabled={isUploading || !selectedFile}
           className="md:col-span-1"
@@ -153,7 +165,6 @@ export default function CertificateUpload({ userId }: Props) {
           {list.map((c) => (
             <li key={c.id} className="p-3 flex items-center gap-3">
               <div className="flex-1">
-                {/* Usamos el nombre original, ya no hay "nombre" manual */}
                 <div className="font-medium">{c.file_name_original}</div>
                 <div className="text-xs text-gray-600">
                   Subido: {new Date(c.uploaded_at).toLocaleDateString()}
@@ -161,12 +172,21 @@ export default function CertificateUpload({ userId }: Props) {
               </div>
               <button
                 onClick={() => onFileDownload(c)}
-                disabled={downloadStatus[c.id]}
+                disabled={downloadStatus[c.id] || deleteStatus[c.id]}
                 className="text-sm px-3 py-1 rounded-lg border hover:bg-gray-100 disabled:opacity-50"
               >
                 {downloadStatus[c.id] ? "..." : "Descargar"}
               </button>
-              {/* El botón de eliminar se quita, ya que no hicimos ese endpoint */}
+              
+              {/* --- 5. AÑADE EL BOTÓN DE ELIMINAR --- */}
+              <button
+                onClick={() => onFileDelete(c)}
+                disabled={deleteStatus[c.id] || downloadStatus[c.id]}
+                className="text-sm px-3 py-1 rounded-lg border text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {deleteStatus[c.id] ? "..." : "Eliminar"}
+              </button>
+              
             </li>
           ))}
         </ul>
