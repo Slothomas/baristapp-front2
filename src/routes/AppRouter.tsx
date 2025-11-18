@@ -19,6 +19,7 @@ import Support from "../pages/Support";
 import Register from "../features/auth/Register";
 
 
+
 const router = createBrowserRouter([
   { path: "/", element: <Home /> },
   { path: "/login", element: <Login /> },
