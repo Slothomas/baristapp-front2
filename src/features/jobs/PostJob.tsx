@@ -38,7 +38,7 @@ export default function PostJob() {
     //
     // Activamos la validación de rol. Asumimos que "cafe" y "academy"
     // son los únicos que pueden publicar.
-    if (u.role === "cafe") {
+    if (u.role !== "cafe") {
       return toast.push("Solo las cafeterías o academias pueden publicar");
     }
 

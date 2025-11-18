@@ -4,49 +4,103 @@ import Card from "../../components/Card";
 import Button from "../../components/Button";
 import { getUserMock } from "../../api/auth";
 import { useToast } from "../../components/Toast";
-import { Link } from "react-router-dom"; // <-- 1. Importa Link
+// import { Link } from "react-router-dom"; // Esta línea ya no es necesaria
 import { useEffect, useState } from "react";
 
-// --- 2. Importa las funciones reales de la API ---
+// --- Importamos las APIs ---
 import {
   getJobsByRestaurant,
   deleteJobOffer,
   updateJobOffer,
   type JobOffer,
 } from "../../api/jobOffer";
-// --- (Quitamos 'jobsStore' y 'applyStore') ---
+import { 
+  getApplicantsForJob, 
+  updateApplicationStatus, 
+  type ApplicationStatus,
+  type Applicant
+} from "../../api/jobApplication";
 
 
 export default function MyJobs() {
   const u = getUserMock();
   const toast = useToast();
+
+  const [myJobs, setMyJobs] = useState<JobOffer[]>([]);
+  const [applicants, setApplicants] = useState<Applicant[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   
-  // --- 3. El estado ahora usa la interfaz real 'JobOffer' ---
-  const [list, setList] = useState<JobOffer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [loadingApplicants, setLoadingApplicants] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState<Record<number, boolean>>({});
 
-  // --- 4. Carga los datos reales al montar ---
+  //
+  // ⬇️⬇️ ¡ARREGLO DEL ERROR! ⬇️⬇️
+  // Saca los valores primitivos (id, role) AFUERA del useEffect
+  // para que sean visibles para todo el componente.
+  //
+  const userId = u?.id;
+  const userRole = u?.role;
+
+  // 1. Cargar las ofertas creadas por este restaurante
   useEffect(() => {
-    if (u && (u.role === "cafe" || u.role === "academy")) {
-      setLoading(true);
-      getJobsByRestaurant(u.id)
-        .then(setList)
-        .catch((err) =>
-          toast.push(err.message || "No se pudo cargar tus ofertas")
-        )
-        .finally(() => setLoading(false));
+    // (Ya no necesitamos definir 'userId' o 'userRole' aquí)
+
+    if (userId && (userRole === "cafe" || userRole === "academy")) {
+      setLoadingJobs(true);
+      getJobsByRestaurant(userId) // <-- Usamos la variable de afuera
+        .then(setMyJobs)
+        .catch((err) => toast.push(err.message || "No se pudo cargar tus ofertas"))
+        .finally(() => setLoadingJobs(false));
+    } else {
+      setLoadingJobs(false); // Si no es rol, no cargues nada
     }
-  }, [u, toast]);
+  //
+  // ⬇️⬇️ ¡ARREGLO DEL BUCLE! ⬇️⬇️
+  // Usamos 'userId' y 'userRole' (estables) en el array de dependencias.
+  //
+  }, [userId, userRole, toast]); // <-- 'toast' puede volver si 'useToast' es estable, pero 'u' era el problema
 
-  // --- 5. Lógica para Ocultar/Mostrar (UPDATE) ---
+  // 2. Cargar los postulantes cuando se selecciona una oferta
+  const handleSelectJob = async (jobId: number) => {
+    if (selectedJobId === jobId) return; 
+    setSelectedJobId(jobId);
+    setLoadingApplicants(true);
+    try {
+      const applicantData = await getApplicantsForJob(jobId);
+      setApplicants(applicantData);
+    } catch (err: any) {
+      toast.push(err.message || "No se pudo cargar los postulantes");
+    } finally {
+      setLoadingApplicants(false);
+    }
+  };
+
+  // 3. Aceptar o Rechazar un postulante
+  const handleUpdateStatus = async (application: Applicant, newStatus: ApplicationStatus) => {
+    setUpdatingStatus((prev) => ({ ...prev, [application.id]: true }));
+    try {
+      await updateApplicationStatus(application.id, newStatus);
+      setApplicants((prev) =>
+        prev.map((app) =>
+          app.id === application.id ? { ...app, status: newStatus } : app
+        )
+      );
+      toast.push(`Postulante ${newStatus === "accepted" ? "Aceptado" : "Rechazado"}`);
+    } catch (err: any) {
+      toast.push(err.message || "No se pudo actualizar el estado");
+    } finally {
+      setUpdatingStatus((prev) => ({ ...prev, [application.id]: false }));
+    }
+  };
+
+  // 4. Lógica para Ocultar/Mostrar (UPDATE)
   const handleToggleActive = async (job: JobOffer) => {
-    const newStatus = job.is_active ? 0 : 1; // Invierte el estado
+    const newStatus = job.is_active ? 0 : 1;
     const actionText = newStatus ? "mostrada" : "ocultada";
-
     try {
       await updateJobOffer(job.id, { is_active: newStatus });
-      // Actualiza la lista localmente
-      setList(list.map((j) =>
+      setMyJobs(myJobs.map((j) =>
         j.id === job.id ? { ...j, is_active: newStatus } : j
       ));
       toast.push(`Vacante ${actionText}.`);
@@ -55,23 +109,22 @@ export default function MyJobs() {
     }
   };
 
-  // --- 6. Lógica para Eliminar (DELETE) ---
+  // 5. Lógica para Eliminar (DELETE)
   const handleDelete = async (job: JobOffer) => {
     if (!window.confirm(`¿Seguro que quieres eliminar "${job.title}"?`)) {
       return;
     }
-
     try {
-      await deleteJobOffer(job.id); // Llama al soft delete
-      // Actualiza la lista localmente (la quitamos)
-      setList(list.filter((j) => j.id !== job.id));
+      await deleteJobOffer(job.id);
+      setMyJobs(myJobs.filter((j) => j.id !== job.id));
       toast.push("Vacante eliminada.");
     } catch (err: any) {
       toast.push(err.message || "No se pudo eliminar la vacante.");
     }
   };
 
-  // --- 7. Verificación de Rol ---
+
+  // Renderizado
   if (!u) {
     return (
       <AppLayout>
@@ -79,64 +132,111 @@ export default function MyJobs() {
       </AppLayout>
     );
   }
-  if (u.role !== "cafe" && u.role !== "academy") {
+  // Usamos 'userRole' (estable) para la comprobación
+  if (userRole !== "cafe" && userRole !== "academy") {
     return (
       <AppLayout>
-        <Card className="p-6">Solo cafeterías y academias pueden ver esta página.</Card>
+        <h1 className="text-2xl font-semibold mb-4">Gestionar Vacantes</h1>
+        <Card className="p-6 text-sm text-gray-700">
+          Esta sección es solo para Restaurantes y Academias.
+        </Card>
       </AppLayout>
     );
   }
 
   return (
     <AppLayout>
-      <h1 className="text-2xl font-semibold mb-4">Mis vacantes</h1>
-
-      {loading ? (
-         <Card className="p-6 text-sm text-gray-700">Cargando...</Card>
-      ) : list.length === 0 ? (
-        <Card className="p-6 text-sm text-gray-700">
-          Aún no has publicado vacantes. Ve a <b>Publicar</b> para crear una.
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {list.map((j) => (
-            <Card key={j.id} className="p-4 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{j.title}</div>
-                <div className="text-sm text-gray-600">{j.location}</div>
-                <div className="text-xs mt-1">
-                  Estado: <b>{j.is_active ? "Visible" : "Oculta"}</b>
-                  {/* (Quitamos el 'count' de postulantes por ahora) */}
+      <h1 className="text-2xl font-semibold mb-4">Gestionar Vacantes</h1>
+      <div className="grid gap-6 md:grid-cols-3">
+        
+        {/* Columna 1: Mis Ofertas */}
+        <div className="md:col-span-1 space-y-3">
+          <h2 className="text-lg font-medium">Mis Ofertas Publicadas</h2>
+          {loadingJobs ? (
+            <Card className="p-4 text-sm">Cargando...</Card>
+          ) : (
+            myJobs.map((job) => (
+              <Card
+                key={job.id}
+                className={`p-0 ${
+                  selectedJobId === job.id ? "bg-brand-50 border-2 border-brand-500" : ""
+                }`}
+              >
+                <div 
+                  className={`p-4 cursor-pointer ${selectedJobId !== job.id ? "hover:bg-gray-50" : ""}`}
+                  onClick={() => handleSelectJob(job.id)}
+                >
+                  <h3 className="font-semibold">{job.title}</h3>
+                  <p className="text-sm text-gray-600">{job.location}</p>
+                  <span className={`text-xs px-2 py-0.5 rounded ${job.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                    {job.is_active ? "Activa" : "Cerrada"}
+                  </span>
                 </div>
-              </div>
-
-              <div className="flex gap-2">
-                {/* --- 8. Usamos <Link> de React Router --- */}
-                <Link
-                  to={`/app/jobs/${j.id}/applications`}
-                  className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium hover:bg-gray-100"
-                >
-                  Ver postulantes
-                </Link>
-
-                <Button
-                  variant="secondary"
-                  onClick={() => handleToggleActive(j)}
-                >
-                  {j.is_active ? "Ocultar" : "Mostrar"}
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  onClick={() => handleDelete(j)}
-                >
-                  Eliminar
-                </Button>
-              </div>
-            </Card>
-          ))}
+                <div className="p-4 border-t border-gray-100 flex gap-2">
+                   <Button
+                      variant="secondary"
+                      onClick={() => handleToggleActive(job)}
+                    >
+                      {job.is_active ? "Ocultar" : "Mostrar"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleDelete(job)}
+                    >
+                      Eliminar
+                    </Button>
+                </div>
+              </Card>
+            ))
+          )}
+          {myJobs.length === 0 && !loadingJobs && (
+            <Card className="p-4 text-sm text-gray-600">No has publicado ofertas.</Card>
+          )}
         </div>
-      )}
+
+        {/* Columna 2: Postulantes */}
+        <div className="md:col-span-2 space-y-3">
+          <h2 className="text-lg font-medium">Postulantes</h2>
+          {loadingApplicants ? (
+            <Card className="p-6 text-sm">Cargando postulantes...</Card>
+          ) : !selectedJobId ? (
+            <Card className="p-6 text-sm text-gray-600">
+              Selecciona una oferta de la izquierda para ver los postulantes.
+            </Card>
+          ) : applicants.length === 0 ? (
+            <Card className="p-6 text-sm text-gray-600">
+              Aún no hay postulantes para esta oferta.
+            </Card>
+          ) : (
+            applicants.map((app) => (
+              <Card key={app.id} className="p-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-semibold">Postulante ID: {app.user_id}</p>
+                    <p className="text-sm text-gray-600">Estado: {app.status}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => handleUpdateStatus(app, "accepted")}
+                      disabled={updatingStatus[app.id] || app.status === "accepted"}
+                    >
+                      {app.status === "accepted" ? "Aceptado" : "Aceptar"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleUpdateStatus(app, "rejected")}
+                      disabled={updatingStatus[app.id] || app.status === "rejected"}
+                    >
+                      {app.status === "rejected" ? "Rechazado" : "Rechazar"}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      </div>
     </AppLayout>
   );
 }

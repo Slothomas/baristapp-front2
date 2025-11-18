@@ -80,7 +80,7 @@ export async function getAllJobOffers(): Promise<JobOffer[]> {
 export async function getJobsByRestaurant(
   userId: number | string
 ): Promise<JobOffer[]> {
-  const res = await http.get<JobOffer[]>(`/job-offers/user/${userId}/`); // <-- Añadida la barra
+  const res = await http.get<JobOffer[]>(`/job-offers/user/${userId}`);
   return res.data;
 }
 

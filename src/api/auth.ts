@@ -1,11 +1,12 @@
+// src/api/auth.ts
 import { http } from "./http";
 import { sget, sset, sdel } from "../lib/secureStorage";
 
 export type Role = "barista" | "cafe" | "academy" | "admin";
 
 export interface AuthUser {
-  id: string;      // lo que usa el front en todas partes
-  name: string;    // usado por Navbar, Dashboard, Profile
+  id: string;       // lo que usa el front en todas partes
+  name: string;     // usado por Navbar, Dashboard, Profile
   email: string;
   role?: string;
   token?: string;
@@ -36,7 +37,7 @@ export async function registerUser(payload: {
 // ===========================================================
 // LOGIN  → POST /login
 // Backend espera: { user: string, password: string }
-// Respuesta: { success, message, user_id, email, user }
+// Respuesta: { success, message, user_id, email, user, role }
 // ===========================================================
 export async function loginUser(email: string, password: string) {
   // 👇 OJO: el backend espera "user", no "email"
@@ -51,7 +52,7 @@ export async function loginUser(email: string, password: string) {
     id: String(raw.user_id),
     name: raw.user,
     email: raw.email,
-    role: undefined,
+    role: raw.role || undefined, 
   };
 
   // Por ahora el backend no devuelve token.

@@ -5,28 +5,27 @@ import Card from "../../components/Card";
 import Button from "../../components/Button";
 import { useToast } from "../../components/Toast";
 import { getUserMock } from "../../api/auth";
+
 import { getAllJobOffers, type JobOffer, type JobType } from "../../api/jobOffer";
 import { applyToJob, getMyApplications, type MyApplication } from "../../api/jobApplication";
 
-
-// --- 2. ¡Tu idea! Un helper para las imágenes ---
-// (Guarda estas imágenes de ejemplo en tu carpeta /public/images/)
+// ... (función getJobTypeImage)
 function getJobTypeImage(jobType: JobType): string {
   switch (jobType) {
     case "full_time":
-      return "/images/job-full-time.jpg"; // Imagen genérica para full time
+      return "/images/job-full-time.jpg"; 
     case "part_time":
-      return "/images/job-part-time.jpg"; // Imagen para part time
+      return "/images/job-part-time.jpg"; 
     case "replacement":
-      return "/images/job-replacement.jpg"; // Imagen para reemplazo
+      return "/images/job-replacement.jpg"; 
     case "urgent":
-      return "/images/job-urgent.jpg"; // Imagen para urgente
+      return "/images/job-urgent.jpg"; 
     default:
-      return "/images/job-default.jpg"; // Una imagen por defecto
+      return "/images/job-default.jpg"; 
   }
 }
 
-// Función para formatear el estado (para "Mis Postulaciones")
+// ... (función formatStatus)
 function formatStatus(status: string): string {
   const statusMap: Record<string, string> = {
     pending: "Pendiente",
@@ -41,15 +40,20 @@ export default function JobsList() {
   const u = getUserMock();
   const toast = useToast();
   
-  // --- 3. Dos estados: uno para ofertas, uno para mis postulaciones ---
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [myApplications, setMyApplications] = useState<MyApplication[]>([]);
   
   const [loadingOffers, setLoadingOffers] = useState(true);
   const [loadingApps, setLoadingApps] = useState(true);
-  const [applying, setApplying] = useState<Record<number, boolean>>({}); // Para deshabilitar botones
+  const [applying, setApplying] = useState<Record<number, boolean>>({});
 
-  // --- 4. Cargamos AMBAS listas desde el backend ---
+  //
+  // ⬇️⬇️ ¡¡ARREGLO DEL BUCLE!! ⬇️⬇️
+  // 1. Saca los valores primitivos (id, role) AFUERA del useEffect.
+  //
+  const userId = u?.id;
+  const userRole = u?.role;
+
   useEffect(() => {
     // A. Cargar todas las vacantes
     async function fetchJobs() {
@@ -66,14 +70,11 @@ export default function JobsList() {
 
     // B. Cargar mis postulaciones (solo si soy barista)
     async function fetchMyApplications() {
-      // **ARREGLO PARA 'u is possibly null'**
-      // Primero, revisa si el usuario existe (no es null)
-      // y LUEGO revisa su rol.
-      if (u && u.role === "barista") {
+      // 2. Ahora usamos 'userRole' y 'userId' (que son estables)
+      if (userRole === "barista" && userId) {
         setLoadingApps(true);
         try {
-          // 'u.id' ahora es seguro de usar
-          const apps = await getMyApplications(u.id);
+          const apps = await getMyApplications(userId); // <-- usa la variable estable
           setMyApplications(apps);
         } catch (err: any) {
           toast.push(err.message || "No se pudo cargar tus postulaciones.");
@@ -81,14 +82,17 @@ export default function JobsList() {
           setLoadingApps(false);
         }
       } else {
-        // Si no hay usuario o no es barista, no hagas nada.
         setLoadingApps(false);
       }
     }
 
     fetchJobs();
     fetchMyApplications();
-  }, [u, toast]); // El 'u' aquí es la dependencia correcta
+  //
+  // ⬇️⬇️ ¡¡Y AQUÍ!! ⬇️⬇️
+  // 3. Usa los valores primitivos y estables en el array de dependencias.
+  //
+  }, [userId, userRole]); // <-- El 'toast' también se quita
 
   // --- 5. Lógica de postulación real ---
   async function apply(job: JobOffer) {
@@ -99,11 +103,9 @@ export default function JobsList() {
       await applyToJob(
         {
           job_offer_id: job.id,
-          // (Opcional) Podríamos abrir un modal para pedir una cover_letter
         },
         u.id
       );
-
       toast.push("¡Postulación enviada con éxito!");
 
     } catch (err: any) {
@@ -118,9 +120,8 @@ export default function JobsList() {
     }
   }
 
-  // **ARREGLO PARA 'u is possibly null'**
-  // Usamos 'optional chaining' (?.). Si 'u' es null, isBarista será false.
-  const isBarista = u?.role === "barista";
+  // Ahora 'isBarista' se basa en la variable estable 'userRole'
+  const isBarista = userRole === "barista";
 
   return (
     <AppLayout>
@@ -176,7 +177,6 @@ export default function JobsList() {
           {loadingOffers ? (
             <Card className="p-6">Cargando vacantes...</Card>
           ) : !offers.length ? (
-            // **ARREGLO DEL TYPO 'DatoCard'**
             <Card className="p-6 text-sm text-gray-700">
               No hay vacantes activas por ahora.
             </Card> 
