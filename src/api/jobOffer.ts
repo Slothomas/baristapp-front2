@@ -93,7 +93,7 @@ export async function updateJobOffer(
   payload: JobOfferUpdatePayload
 ): Promise<JobOffer> {
   const res = await http.put<JobOffer>(
-    `/job-offers/${jobOfferId}/`, // <-- Añadida la barra
+    `/job-offers/${jobOfferId}`, // <-- Añadida la barra
     payload
   );
   return res.data;
@@ -108,6 +108,6 @@ export async function deleteJobOffer(
 ): Promise<void> {
   // El backend de tu compañero usa un 'soft delete',
   // así que esto marcará 'is_active = 0'
-  await http.delete(`/job-offers/${jobOfferId}/`); // <-- Añadida la barra
+  await http.delete(`/job-offers/${jobOfferId}`); // <-- Añadida la barra
   return;
 }
