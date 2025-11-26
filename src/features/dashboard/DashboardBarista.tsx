@@ -59,7 +59,7 @@ export default function DashboardBarista() {
   const baristaName = u?.name ?? "—";
 
   const [applications, setApplications] = useState<MyApplication[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [_assignments, setAssignments] = useState<Assignment[]>([]); // ← FIX
   const [reviews, setReviews] = useState<ReviewsByUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,7 +79,7 @@ export default function DashboardBarista() {
         setApplications(apps);
 
         const ass = await getAssignmentsByWorker(userId);
-        setAssignments(ass);
+        setAssignments(ass); // ← FIX: ahora existe setAssignments
 
         const rev = await getReviewsByUser(userId);
         setReviews(rev);
@@ -237,11 +237,7 @@ export default function DashboardBarista() {
           color="blue"
         />
         <KPICard label="Activas" value={metrics.active} color="green" />
-        <KPICard
-          label="Rechazadas"
-          value={metrics.rejected}
-          color="orange"
-        />
+        <KPICard label="Rechazadas" value={metrics.rejected} color="orange" />
         <KPICard
           label="Completadas"
           value={metrics.completedCount}

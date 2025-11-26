@@ -15,7 +15,6 @@ import {
 
 import {
   getJobOfferById,
-  type JobOffer,
 } from "../../api/jobOffer";
 
 // Recharts
