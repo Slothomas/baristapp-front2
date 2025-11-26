@@ -1,15 +1,15 @@
 // src/features/profile/Profile.tsx
 import AppLayout from "../../components/AppLayout";
-import Input from "../../components/Input";
 import Button from "../../components/Button";
 import Card from "../../components/Card";
-import { useState, useEffect } from "react";
-import { useToast } from "../../components/Toast";
-import { getUserMock } from "../../api/auth";
+import Input from "../../components/Input";
 import CertificateUpload from "../../components/CertificateUpload";
 
+import { useEffect, useState } from "react";
+import { useToast } from "../../components/Toast";
+import { getUserMock } from "../../api/auth";
+
 import { fetchUserByEmail, updateUserProfile } from "../../api/users";
-// --- 1. Importa la nueva función 'uploadAvatar' ---
 import { fetchProfile, upsertProfile, uploadAvatar } from "../../api/profile";
 
 type ProfileRole = "barista" | "cafe" | "academy" | "admin";
@@ -17,11 +17,57 @@ type ProfileRole = "barista" | "cafe" | "academy" | "admin";
 type ProfileData = {
   name: string;
   role: ProfileRole;
+  contact_number: string; // ✅ NUEVO (snake_case recomendado)
   avatar?: string;
   years?: number;
   skills: string[];
   bio: string;
+
+  // gig-economy
+  region?: string;
+  comuna?: string;
+  availability_json?: any; // puede ser objeto o string temporal
+  rate_hour?: number;
+  min_shift_rate?: number;
+  business_name?: string;
+  business_type?: string;
+
+  // calculados backend
+  rating_avg?: number | null;
+  reviews_count?: number | null;
 };
+
+// helper para normalizar rol desde backend
+function normalizeRole(raw: any): ProfileRole {
+  const r = (raw ?? "").toString().toLowerCase().trim();
+  if (r === "barista" || r === "worker" || r === "freelancer") return "barista";
+  if (r === "cafe" || r === "client" || r === "restaurant" || r === "cafeteria")
+    return "cafe";
+  if (r === "academy" || r === "escuela" || r === "training_center")
+    return "academy";
+  if (r === "admin" || r === "administrator") return "admin";
+  return "barista";
+}
+
+// helper: si es objeto JSON válido lo devuelve, si es string inválido => undefined
+function safeJsonForBackend(value: any) {
+  if (value == null || value === "") return undefined;
+  if (typeof value === "object") return value;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function validatePhone(phoneRaw: string): boolean {
+  const clean = (phoneRaw ?? "").replace(/[^0-9+]/g, "");
+  const digitsOnly = clean.replace(/\D/g, "");
+  return digitsOnly.length >= 8;
+}
 
 export default function Profile() {
   const toast = useToast();
@@ -33,16 +79,27 @@ export default function Profile() {
   const [form, setForm] = useState<ProfileData>({
     name: "",
     role: "barista",
+    contact_number: "", // ✅ NUEVO
     avatar: undefined,
     years: undefined,
     skills: [],
     bio: "",
+
+    region: "",
+    comuna: "",
+    availability_json: null,
+    rate_hour: undefined,
+    min_shift_rate: undefined,
+    business_name: "",
+    business_type: "",
+
+    rating_avg: null,
+    reviews_count: null,
   });
 
-  const [errors, setErrors] = useState<{ name?: string }>();
+  const [errors, setErrors] = useState<{ name?: string; contact_number?: string }>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  // --- 2. Añade un estado de "subiendo avatar" ---
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // =========================================================
@@ -56,7 +113,6 @@ export default function Profile() {
       }
 
       try {
-        // Cargamos usuario + perfil en paralelo
         const [userRes, profileRes] = await Promise.allSettled([
           fetchUserByEmail(email),
           fetchProfile(userId),
@@ -64,12 +120,19 @@ export default function Profile() {
 
         let nameFromUser = "";
         let roleFromUser: ProfileRole = "barista";
+        let contactFromUser = ""; // ✅ NUEVO
 
-        // Datos de app_user
         if (userRes.status === "fulfilled") {
           const user = userRes.value;
-          nameFromUser = user.user;
-          roleFromUser = (user.clave as ProfileRole) || "barista";
+          nameFromUser = user.user ?? "";
+          roleFromUser = normalizeRole(user.clave ?? user.clave);
+
+          // ✅ si backend trae contact_number / contactNumber / phone
+          contactFromUser =
+            (user as any).contact_number ??
+            (user as any).contactNumber ??
+            (user as any).phone ??
+            "";
         }
 
         let years: number | undefined = undefined;
@@ -77,13 +140,35 @@ export default function Profile() {
         let bio = "";
         let avatar: string | undefined = undefined;
 
-        // Datos de app_user_profile
+        let region = "";
+        let comuna = "";
+        let availability_json: any = null;
+        let rate_hour: number | undefined = undefined;
+        let min_shift_rate: number | undefined = undefined;
+        let business_name = "";
+        let business_type = "";
+        let rating_avg: number | null = null;
+        let reviews_count: number | null = null;
+
         if (profileRes.status === "fulfilled") {
           const p = profileRes.value;
+
           years = p.years_experience ?? undefined;
           skills = p.skills ?? [];
           bio = p.bio ?? "";
           avatar = p.avatar_url ?? undefined;
+
+          region = p.region ?? "";
+          comuna = p.comuna ?? "";
+          availability_json = p.availability_json ?? null;
+          rate_hour = p.rate_hour != null ? Number(p.rate_hour) : undefined;
+          min_shift_rate =
+            p.min_shift_rate != null ? Number(p.min_shift_rate) : undefined;
+          business_name = p.business_name ?? "";
+          business_type = p.business_type ?? "";
+          rating_avg = p.rating_avg != null ? Number(p.rating_avg) : null;
+          reviews_count =
+            p.reviews_count != null ? Number(p.reviews_count) : null;
 
           if (!nameFromUser && p.full_name) {
             nameFromUser = p.full_name;
@@ -93,10 +178,21 @@ export default function Profile() {
         setForm({
           name: nameFromUser,
           role: roleFromUser,
+          contact_number: contactFromUser, // ✅ NUEVO
           years,
           skills,
           bio,
           avatar,
+
+          region,
+          comuna,
+          availability_json,
+          rate_hour,
+          min_shift_rate,
+          business_name,
+          business_type,
+          rating_avg,
+          reviews_count,
         });
       } catch (err) {
         console.error("Error cargando perfil:", err);
@@ -110,13 +206,12 @@ export default function Profile() {
   }, [email, userId, toast]);
 
   // =========================================================
-  // Subir avatar (¡AHORA CONECTADO AL BACKEND!)
+  // Subir avatar
   // =========================================================
   async function onAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
 
-    // Validar tipo de archivo (opcional, el backend también lo hace)
     if (!file.type.startsWith("image/")) {
       toast.push("Por favor, selecciona un archivo de imagen.");
       return;
@@ -124,22 +219,17 @@ export default function Profile() {
 
     setIsUploadingAvatar(true);
     try {
-      // 1. Llama a la nueva función de la API
       const updatedProfile = await uploadAvatar(userId, file);
-
-      // 2. Actualiza el estado local con la nueva URL del avatar
       setForm((f) => ({
         ...f,
         avatar: updatedProfile.avatar_url ?? undefined,
       }));
-
       toast.push("Avatar actualizado.");
     } catch (err: any) {
       console.error("Error subiendo avatar:", err);
       toast.push(err.message || "No se pudo subir el avatar.");
     } finally {
       setIsUploadingAvatar(false);
-      // Limpiar el input para que se pueda volver a subir el mismo archivo
       e.target.value = "";
     }
   }
@@ -152,6 +242,13 @@ export default function Profile() {
     const errs: typeof errors = {};
 
     if (!form.name.trim()) errs.name = "Ingresa un nombre";
+
+    // ✅ Validación contacto
+    if (!form.contact_number.trim())
+      errs.contact_number = "Ingresa tu número de contacto";
+    else if (!validatePhone(form.contact_number.trim()))
+      errs.contact_number = "Número inválido (mín. 8 dígitos)";
+
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
@@ -163,23 +260,34 @@ export default function Profile() {
     try {
       setSaving(true);
 
-      // 1) Actualizar nombre + rol en app_user
       await updateUserProfile(email, {
         name: form.name.trim(),
         role: form.role,
+        contact_number: form.contact_number.trim(), // ✅ NUEVO
       });
 
-      // 2) Upsert en app_user_profile
-      // NOTA: El avatar ya no se envía aquí, se maneja por 'onAvatar'
-      // Lo dejamos para que el 'bio' o 'skills' se puedan guardar
-      // sin cambiar el avatar.
       await upsertProfile(userId, {
         full_name: form.name.trim(),
         bio: form.bio || undefined,
         years_experience:
           typeof form.years === "number" ? form.years : undefined,
         skills: form.skills ?? [],
-        avatar_url: form.avatar || undefined, // Mantenemos la URL actual
+        avatar_url: form.avatar || undefined,
+
+        region: form.region || undefined,
+        comuna: form.comuna || undefined,
+
+        // ✅ solo mandamos JSON válido
+        availability_json: safeJsonForBackend(form.availability_json),
+
+        rate_hour:
+          typeof form.rate_hour === "number" ? form.rate_hour : undefined,
+        min_shift_rate:
+          typeof form.min_shift_rate === "number"
+            ? form.min_shift_rate
+            : undefined,
+        business_name: form.business_name || undefined,
+        business_type: form.business_type || undefined,
       });
 
       toast.push("Perfil guardado correctamente");
@@ -197,7 +305,9 @@ export default function Profile() {
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-semibold mb-6 text-gray-800">Mi Perfil</h1>
+        <h1 className="text-3xl font-semibold mb-6 text-gray-800">
+          Mi Perfil
+        </h1>
 
         <Card className="p-6 shadow-md">
           {loading ? (
@@ -206,8 +316,6 @@ export default function Profile() {
             <form onSubmit={onSubmit} className="grid gap-5">
               <div className="flex items-center gap-5">
                 <div className="h-24 w-24 rounded-full bg-gray-200 overflow-hidden grid place-items-center ring-2 ring-brand-500">
-                  
-                  {/* --- 3. Añade un indicador de carga --- */}
                   {isUploadingAvatar ? (
                     <span className="text-xs text-gray-500 p-2 text-center">
                       Cargando...
@@ -222,6 +330,7 @@ export default function Profile() {
                     <span className="text-xs text-gray-500">Sin avatar</span>
                   )}
                 </div>
+
                 <label className="text-sm">
                   <span className="block mb-1 font-medium text-gray-700">
                     Cambiar avatar
@@ -230,12 +339,28 @@ export default function Profile() {
                     type="file"
                     accept="image/*"
                     onChange={onAvatar}
-                    // Deshabilita el botón mientras se sube
                     disabled={isUploadingAvatar}
                     className="text-sm"
                   />
                 </label>
               </div>
+
+              {/* Rating / reviews (solo lectura) */}
+              <Card className="p-4 bg-gray-50">
+                <div className="text-sm text-gray-700">
+                  Rating promedio:{" "}
+                  <b>
+                    {form.rating_avg != null
+                      ? form.rating_avg.toFixed(1)
+                      : "—"}
+                  </b>{" "}
+                  / 5
+                </div>
+                <div className="text-sm text-gray-700">
+                  Reseñas recibidas:{" "}
+                  <b>{form.reviews_count != null ? form.reviews_count : 0}</b>
+                </div>
+              </Card>
 
               <Input
                 label="Nombre completo"
@@ -244,6 +369,21 @@ export default function Profile() {
                   setForm((f) => ({ ...f, name: e.target.value }))
                 }
                 error={errors?.name}
+                required
+              />
+
+              {/* ✅ NUEVO CONTACTO */}
+              <Input
+                label="Número de contacto"
+                placeholder="+56912345678"
+                value={form.contact_number}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    contact_number: e.target.value.replace(/[^0-9+]/g, ""),
+                  }))
+                }
+                error={errors?.contact_number}
                 required
               />
 
@@ -265,6 +405,115 @@ export default function Profile() {
                   <option value="admin">Administrador</option>
                 </select>
               </label>
+
+              {/* Ubicación */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <label className="block space-y-1">
+                  <span className="text-sm text-gray-700 font-medium">
+                    Región
+                  </span>
+                  <input
+                    className="w-full border rounded-lg p-2"
+                    value={form.region ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, region: e.target.value }))
+                    }
+                  />
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-sm text-gray-700 font-medium">
+                    Comuna
+                  </span>
+                  <input
+                    className="w-full border rounded-lg p-2"
+                    value={form.comuna ?? ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, comuna: e.target.value }))
+                    }
+                  />
+                </label>
+              </div>
+
+              {/* Datos gig-economy */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <label className="block space-y-1">
+                  <span className="text-sm text-gray-700 font-medium">
+                    Tarifa por hora (CLP)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border rounded-lg p-2"
+                    value={form.rate_hour ?? 0}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        rate_hour: Math.max(0, Number(e.target.value || 0)),
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-sm text-gray-700 font-medium">
+                    Mínimo por turno (CLP)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-full border rounded-lg p-2"
+                    value={form.min_shift_rate ?? 0}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        min_shift_rate: Math.max(
+                          0,
+                          Number(e.target.value || 0)
+                        ),
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+
+              {/* Campos negocio */}
+              {(form.role === "cafe" || form.role === "academy") && (
+                <div className="grid md:grid-cols-2 gap-4">
+                  <label className="block space-y-1">
+                    <span className="text-sm text-gray-700 font-medium">
+                      Nombre del negocio
+                    </span>
+                    <input
+                      className="w-full border rounded-lg p-2"
+                      value={form.business_name ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          business_name: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-sm text-gray-700 font-medium">
+                      Tipo de negocio
+                    </span>
+                    <input
+                      className="w-full border rounded-lg p-2"
+                      placeholder="Cafetería / Academia"
+                      value={form.business_type ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          business_type: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              )}
 
               <div className="grid md:grid-cols-2 gap-4">
                 <label className="block space-y-1">
@@ -319,6 +568,38 @@ export default function Profile() {
                 />
               </label>
 
+              {/* Disponibilidad JSON libre */}
+              <label className="block space-y-1">
+                <span className="text-sm text-gray-700 font-medium">
+                  Disponibilidad (JSON)
+                </span>
+                <textarea
+                  rows={3}
+                  className="w-full border rounded-lg p-2 resize-none font-mono text-xs"
+                  placeholder='{"days":["Mon","Tue"],"hours":["09:00-18:00"]}'
+                  value={
+                    form.availability_json
+                      ? typeof form.availability_json === "string"
+                        ? form.availability_json
+                        : JSON.stringify(form.availability_json)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      availability_json: e.target.value,
+                    }))
+                  }
+                />
+                {typeof form.availability_json === "string" &&
+                  form.availability_json.trim() !== "" &&
+                  safeJsonForBackend(form.availability_json) === undefined && (
+                    <span className="text-xs text-red-600">
+                      JSON inválido. Corrígelo para poder guardarlo.
+                    </span>
+                  )}
+              </label>
+
               <div className="flex gap-3 justify-end">
                 <Button type="submit" disabled={saving}>
                   {saving ? "Guardando..." : "Guardar cambios"}
@@ -344,10 +625,6 @@ export default function Profile() {
             Sube tus certificados o diplomas en formato PDF.
           </p>
           <Card className="p-6 shadow-sm">
-            {/*
-              Renderiza el componente de certificados solo si 
-              ya tenemos el 'userId'.
-            */}
             {userId ? (
               <CertificateUpload userId={userId} />
             ) : (

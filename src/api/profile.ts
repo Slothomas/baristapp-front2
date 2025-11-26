@@ -8,12 +8,30 @@ export interface ApiProfileRaw {
   full_name: string | null;
   bio: string | null;
   years_experience: number | null;
+
   // OJO: en la BD es string, pero en el schema es List[str],
   // así que puede llegarte como string o como array raro.
   skills: string[] | string | null;
+
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
+
+  // ---------------------------
+  // NUEVOS CAMPOS gig-economy
+  // ---------------------------
+  region?: string | null;
+  comuna?: string | null;
+  availability_json?: any | null;
+
+  rate_hour?: number | string | null;
+  min_shift_rate?: number | string | null;
+
+  business_name?: string | null;
+  business_type?: string | null;
+
+  rating_avg?: number | string | null;
+  reviews_count?: number | string | null;
 }
 
 // Versión normalizada para el front
@@ -23,10 +41,26 @@ export interface ApiProfile {
   full_name: string | null;
   bio: string | null;
   years_experience: number | null;
-  skills: string[];          // siempre array en el front
+  skills: string[]; // siempre array en el front
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
+
+  // ---------------------------
+  // NUEVOS CAMPOS gig-economy
+  // ---------------------------
+  region?: string | null;
+  comuna?: string | null;
+  availability_json?: any | null;
+
+  rate_hour?: number | null;
+  min_shift_rate?: number | null;
+
+  business_name?: string | null;
+  business_type?: string | null;
+
+  rating_avg?: number | null;
+  reviews_count?: number | null;
 }
 
 export type ProfileUpdatePayload = {
@@ -35,9 +69,25 @@ export type ProfileUpdatePayload = {
   years_experience?: number | null;
   skills?: string[];
   avatar_url?: string | null;
+
+  // nuevos campos editables
+  region?: string | null;
+  comuna?: string | null;
+  availability_json?: any | null;
+
+  rate_hour?: number | null;
+  min_shift_rate?: number | null;
+
+  business_name?: string | null;
+  business_type?: string | null;
+
+  // calculados backend: normalmente no los mandas,
+  // pero los tipamos por si backend los acepta/ignora
+  rating_avg?: number | null;
+  reviews_count?: number | null;
 };
 
-// Normaliza skills
+// Normaliza skills + números
 function normalizeProfile(raw: ApiProfileRaw): ApiProfile {
   let skillsArray: string[] = [];
 
@@ -50,9 +100,21 @@ function normalizeProfile(raw: ApiProfileRaw): ApiProfile {
       .filter(Boolean);
   }
 
+  const toNumOrNull = (v: any): number | null => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    return Number.isNaN(n) ? null : n;
+  };
+
   return {
     ...raw,
     skills: skillsArray,
+
+    // casteos numéricos seguros
+    rate_hour: toNumOrNull(raw.rate_hour),
+    min_shift_rate: toNumOrNull(raw.min_shift_rate),
+    rating_avg: toNumOrNull(raw.rating_avg),
+    reviews_count: toNumOrNull(raw.reviews_count),
   };
 }
 
@@ -79,7 +141,6 @@ export async function uploadAvatar(
   userId: number | string,
   file: File
 ): Promise<ApiProfile> {
-  
   const formData = new FormData();
   formData.append("file", file); // La key "file"
 
@@ -93,6 +154,5 @@ export async function uploadAvatar(
     }
   );
 
-  // Devuelve el perfil normalizado con la nueva URL del avatar
   return normalizeProfile(res.data);
 }

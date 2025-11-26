@@ -1,12 +1,20 @@
 // src/api/jobOffer.ts
 import { http } from "./http";
 
-// --- INTERFACES (basadas en los Schemas de tu compañero) ---
+// ---------------------------------------------------------------------------
+// ENUMS BASADOS 100% EN EL BACKEND REAL
+// ---------------------------------------------------------------------------
 
-// El tipo de trabajo (importado del backend)
-export type JobType = "full_time" | "part_time" | "replacement" | "urgent";
+export type JobType = "FULL_TIME" | "PART_TIME" | "REPLACEMENT" | "URGENT";
 
-// La respuesta del backend para una oferta
+export type UrgencyType = "NORMAL" | "URGENT";
+
+export type JobOfferStatus = "PUBLICADO" | "PAUSADO" | "CERRADO";
+
+// ---------------------------------------------------------------------------
+// INTERFACES BASADAS EN EL SCHEMA REAL DEL BACKEND
+// ---------------------------------------------------------------------------
+
 export interface JobOffer {
   id: number;
   title: string;
@@ -14,69 +22,109 @@ export interface JobOffer {
   location: string;
   job_type: JobType;
   description: string;
-  salary_range: string | null;
-  requirements: string | null;
+
+  salary_range?: string | null;
+  requirements?: string | null;
+  required_skills?: string | null;
+
+  urgency: UrgencyType;
+  status: JobOfferStatus;
+
+  region?: string | null;
+  comuna?: string | null;
+  date_start?: string | null;
+  date_end?: string | null;
+
   created_by: number;
+  selected_application_id?: number | null;
+  filled_at?: string | null;
+
+  vacancies_filled: number;
+  vacancies_total: number;
+
+  // ⚡ NUEVOS CAMPOS MULTI-LOCAL
+  business_id?: number | null;
+  location_id?: number | null;
+
   is_active: number;
   created_at: string;
   updated_at: string;
 }
 
-// El payload para actualizar una oferta
-export interface JobOfferUpdatePayload {
-  title?: string;
-  company?: string;
-  location?: string;
-  job_type?: JobType;
-  description?: string;
-  salary_range?: string | null;
-  requirements?: string | null;
-  is_active?: number;
-}
+// ---------------------------------------------------------------------------
+// PAYLOADS PARA CREAR / ACTUALIZAR OFERTAS
+// ---------------------------------------------------------------------------
 
-// El payload para crear una oferta
 export interface JobOfferCreatePayload {
   title: string;
   company: string;
   location: string;
   job_type: JobType;
   description: string;
+
   salary_range?: string | null;
   requirements?: string | null;
-  is_active?: number; // Opcional, por defecto 1
+  required_skills?: string | null;
+
+  urgency?: UrgencyType;
+  status?: JobOfferStatus;
+
+  region?: string | null;
+  comuna?: string | null;
+  date_start?: string | null;
+  date_end?: string | null;
+
+  vacancies_total?: number;
+
+  // ⚡ NUEVO
+  business_id?: number | null;
+  location_id?: number | null;
 }
 
-// --- FUNCIONES DE API ---
+export interface JobOfferUpdatePayload {
+  title?: string;
+  company?: string;
+  location?: string;
+  job_type?: JobType;
 
-/**
- * 1. POST /job-offers/
- * Crea una nueva oferta de trabajo.
- */
+  description?: string;
+  salary_range?: string | null;
+
+  requirements?: string | null;
+  required_skills?: string | null;
+
+  urgency?: UrgencyType;
+  region?: string | null;
+  comuna?: string | null;
+
+  date_start?: string | null;
+  date_end?: string | null;
+
+  status?: JobOfferStatus;
+  is_active?: number;
+
+  // ⚡ NUEVO
+  business_id?: number | null;
+  location_id?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// ENDPOINTS DE OFERTAS — CRUD BÁSICO
+// ---------------------------------------------------------------------------
+
 export async function createJobOffer(
   payload: JobOfferCreatePayload,
-  userId: number | string // El ID del restaurante/café
+  userId: number
 ): Promise<JobOffer> {
-  // El backend de tu compañero pide el user_id como un Query Param
-  const res = await http.post<JobOffer>(
-    `/job-offers/?user_id=${userId}`, // <-- Con barra
-    payload
-  );
+  const res = await http.post<JobOffer>(`/job-offers/?user_id=${userId}`, payload);
   return res.data;
 }
 
-/**
- * 2. GET /job-offers/
- * Obtiene la lista de todas las ofertas (para el muro de "Explorar")
- */
 export async function getAllJobOffers(): Promise<JobOffer[]> {
-  const res = await http.get<JobOffer[]>("/job-offers/"); // <-- Con barra
+  const res = await http.get<JobOffer[]>("/job-offers/");
   return res.data;
 }
 
-/**
- * 3. GET /job-offers/user/{user_id}/
- * Obtiene solo las ofertas creadas por un restaurante específico
- */
 export async function getJobsByRestaurant(
   userId: number | string
 ): Promise<JobOffer[]> {
@@ -84,30 +132,62 @@ export async function getJobsByRestaurant(
   return res.data;
 }
 
-/**
- * 4. PUT /job-offers/{job_offer_id}/
- * Actualiza una oferta de trabajo.
- */
+export async function getJobOfferById(
+  jobOfferId: number | string
+): Promise<JobOffer> {
+  const res = await http.get<JobOffer>(`/job-offers/${jobOfferId}`);
+  return res.data;
+}
+
 export async function updateJobOffer(
   jobOfferId: number | string,
   payload: JobOfferUpdatePayload
 ): Promise<JobOffer> {
-  const res = await http.put<JobOffer>(
-    `/job-offers/${jobOfferId}`, // <-- Añadida la barra
-    payload
+  const res = await http.put<JobOffer>(`/job-offers/${jobOfferId}`, payload);
+  return res.data;
+}
+
+export async function deleteJobOffer(
+  jobOfferId: number | string
+): Promise<void> {
+  await http.delete(`/job-offers/${jobOfferId}`);
+  return;
+}
+
+// ---------------------------------------------------------------------------
+// ENDPOINTS ESPECIALES — MATCHING, SELECCIÓN, STATUS
+// ---------------------------------------------------------------------------
+
+export async function getMatchingWorkers(
+  jobOfferId: number | string
+): Promise<any[]> {
+  const res = await http.get<any[]>(`/job-offers/${jobOfferId}/matching`);
+  return res.data;
+}
+
+export async function getSelectedApplication(
+  jobOfferId: number | string
+): Promise<any> {
+  const res = await http.get<any>(`/job-offers/${jobOfferId}/selected-application`);
+  return res.data;
+}
+
+export async function selectCandidate(
+  jobOfferId: number | string,
+  applicationId: number | string,
+  recruiterNotes: string = ""
+): Promise<any> {
+  const res = await http.post(
+    `/job-offers/${jobOfferId}/select/${applicationId}?recruiter_notes=${encodeURIComponent(
+      recruiterNotes
+    )}`
   );
   return res.data;
 }
 
-/**
- * 5. DELETE /job-offers/{job_offer_id}/
- * Elimina (desactiva) una oferta de trabajo.
- */
-export async function deleteJobOffer(
+export async function closeJobOffer(
   jobOfferId: number | string
-): Promise<void> {
-  // El backend de tu compañero usa un 'soft delete',
-  // así que esto marcará 'is_active = 0'
-  await http.delete(`/job-offers/${jobOfferId}`); // <-- Añadida la barra
-  return;
+): Promise<any> {
+  const res = await http.put<any>(`/job-offers/${jobOfferId}/close`);
+  return res.data;
 }

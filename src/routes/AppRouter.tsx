@@ -1,8 +1,10 @@
+// src/routes/AppRouter.tsx
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import Home from "../pages/Home";
 import Login from "../features/auth/Login";
 import Protected from "./Protected";
+import RoleProtected from "./RoleProtected";
 
 import Dashboard from "../pages/Dashboard";
 import JobsList from "../features/jobs/JobsList";
@@ -18,7 +20,7 @@ import AdminUsers from "../features/admin/AdminUsers";
 import Support from "../pages/Support";
 import Register from "../features/auth/Register";
 
-
+import ReviewsDashboard from "../features/reviews/ReviewDashboard"; 
 
 const router = createBrowserRouter([
   { path: "/", element: <Home /> },
@@ -31,26 +33,53 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Dashboard /> },
 
-      // Barista
-      { path: "jobs", element: <JobsList /> },
-      { path: "my-applications", element: <MyApplications /> },
+      // ------------------------
+      // BARISTA (worker)
+      // ------------------------
+      {
+        element: <RoleProtected allow={["barista"]} />,
+        children: [
+          { path: "jobs", element: <JobsList /> },
+          { path: "my-applications", element: <MyApplications /> },
+        ],
+      },
 
-      // Cafetería
-      { path: "post", element: <PostJob /> },
-      { path: "jobs/manage", element: <MyJobs /> },
-      { path: "jobs/:jobId/applications", element: <ApplicationsByJob /> },
+      // ------------------------
+      // CAFE (restaurant/client)
+      // ------------------------
+      {
+        element: <RoleProtected allow={["cafe"]} />,
+        children: [
+          { path: "post", element: <PostJob /> },
+          { path: "jobs/:jobId/edit", element: <PostJob /> },
+          { path: "jobs/manage", element: <MyJobs /> },
+          { path: "jobs/:jobId/applications", element: <ApplicationsByJob /> },
 
-      // Academia
-      { path: "certificates/upload", element: <UploadCertificate /> },
+          { path: "reviews", element: <ReviewsDashboard /> },
+        ],
+      },
 
-      // Perfil propio y público
+      // ------------------------
+      // ACADEMY
+      // ------------------------
+      {
+        element: <RoleProtected allow={["academy"]} />,
+        children: [
+          { path: "certificates/upload", element: <UploadCertificate /> },
+        ],
+      },
+
+      // PERFIL
       { path: "profile", element: <Profile /> },
       { path: "users/:userId", element: <PublicProfile /> },
 
-      // Admin
-      { path: "admin/users", element: <AdminUsers /> },
+      // ADMIN
+      {
+        element: <RoleProtected allow={["admin"]} />,
+        children: [{ path: "admin/users", element: <AdminUsers /> }],
+      },
 
-      // Soporte
+      // SOPORTE
       { path: "support", element: <Support /> },
     ],
   },

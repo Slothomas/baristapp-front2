@@ -2,19 +2,35 @@
 import { http } from "./http";
 import { sget, sset, sdel } from "../lib/secureStorage";
 
-export type Role = "barista" | "cafe" | "academy" | "admin";
+export type Role = "barista" | "cafe" | "academy" | "admin" | "worker" | "client";
 
 export interface AuthUser {
-  id: string;       // lo que usa el front en todas partes
-  name: string;     // usado por Navbar, Dashboard, Profile
+  id: string;
+  name: string;
   email: string;
-  role?: string;
+  role?: Role;
   token?: string;
-  user?: string;   // opcional, por compatibilidad
+  user?: string;
 }
 
 const AUTH_K = "auth.user.secure";
 const TOKEN_K = "auth.token.secure";
+
+// ---------------------------------------------------------
+// Normalizador de roles (clave → role del frontend)
+// ---------------------------------------------------------
+function normalizeRole(value?: string | null): Role {
+  if (!value) return "barista";
+
+  const v = value.toLowerCase().trim();
+
+  if (["barista", "worker"].includes(v)) return "barista";
+  if (["cafe", "client", "cafeteria", "restaurant"].includes(v)) return "cafe";
+  if (["academy", "academia"].includes(v)) return "academy";
+  if (["admin"].includes(v)) return "admin";
+
+  return "barista"; // fallback
+}
 
 // ===========================================================
 // REGISTRO  → POST /users
@@ -31,32 +47,30 @@ export async function registerUser(payload: {
     is_active: payload.is_active ?? 1,
   });
 
-  return res.data; // la respuesta viene en formato UserResponse
+  return res.data;
 }
 
 // ===========================================================
 // LOGIN  → POST /login
-// Backend espera: { user: string, password: string }
-// Respuesta: { success, message, user_id, email, user, role }
 // ===========================================================
 export async function loginUser(email: string, password: string) {
-  // 👇 OJO: el backend espera "user", no "email"
   const res = await http.post("/login", {
-    user: email,
+    user: email,      // backend espera "user"
     password: password,
   });
 
-  const raw = res.data; // LoginResponse
+  const raw = res.data;
+
+  const normalizedRole = normalizeRole(raw.role || raw.clave);
 
   const user: AuthUser = {
     id: String(raw.user_id),
     name: raw.user,
     email: raw.email,
-    role: raw.role || undefined, 
+    role: normalizedRole,
   };
 
-  // Por ahora el backend no devuelve token.
-  // Guardamos un token dummy para que isAuthed() funcione.
+  // token dummy
   const token = "dummy-token";
 
   sset(AUTH_K, user);
@@ -65,7 +79,6 @@ export async function loginUser(email: string, password: string) {
   return user;
 }
 
-// Alias para mantener compatibilidad con código viejo
 export function loginMock(email: string, password: string) {
   return loginUser(email, password);
 }
@@ -79,13 +92,19 @@ export function logout() {
 }
 
 // ===========================================================
-// OBTENER USUARIO ACTUAL
+// GET USER (mock / real)
 // ===========================================================
 export function getCurrentUser(): AuthUser | null {
-  return sget<AuthUser>(AUTH_K);
+  const user = sget<AuthUser>(AUTH_K);
+  if (!user) return null;
+
+  return {
+    ...user,
+    role: normalizeRole(user.role), // normalizamos por si quedó viejo
+  };
 }
 
-// Alias de compatibilidad (Navbar, Profile, etc.)
+// Alias
 export function getUserMock(): AuthUser | null {
   return getCurrentUser();
 }
