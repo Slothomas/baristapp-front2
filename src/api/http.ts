@@ -7,8 +7,6 @@ let baseURL =
     ? "http://127.0.0.1:8000" // 🔧 local
     : "https://baristappback-axg6grb2ahaffnby.canadacentral-01.azurewebsites.net"; // 🔐 prod SIEMPRE https
 
-// 🔒 Cinturón de seguridad extra: si por alguna env var o config
-// quedara en http:// en producción, lo forzamos a https://
 if (!import.meta.env.DEV && baseURL.startsWith("http://")) {
   baseURL = baseURL.replace("http://", "https://");
 }
