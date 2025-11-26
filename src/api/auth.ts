@@ -13,6 +13,12 @@ export interface AuthUser {
   user?: string;
 }
 
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
+
 const AUTH_K = "auth.user.secure";
 const TOKEN_K = "auth.token.secure";
 
@@ -119,4 +125,8 @@ export function logoutMock() {
 export function isAuthed(): boolean {
   const token = sget<string>(TOKEN_K);
   return !!token && !!getCurrentUser();
+}
+
+export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
+  await http.post("/auth/change-password", payload);
 }

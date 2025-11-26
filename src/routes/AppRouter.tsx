@@ -1,26 +1,26 @@
 // src/routes/AppRouter.tsx
+
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import Home from "../pages/Home";
 import Login from "../features/auth/Login";
 import Protected from "./Protected";
 import RoleProtected from "./RoleProtected";
-
 import Dashboard from "../pages/Dashboard";
 import JobsList from "../features/jobs/JobsList";
 import PostJob from "../features/jobs/PostJob";
 import MyJobs from "../features/jobs/MyJobs";
 import ApplicationsByJob from "../features/jobs/ApplicationsByJob";
 import MyApplications from "../features/jobs/MyApplications";
-
 import Profile from "../features/profile/Profile";
 import PublicProfile from "../features/profile/PublicProfile";
 import UploadCertificate from "../features/certificates/UploadCertificate";
 import AdminUsers from "../features/admin/AdminUsers";
 import Support from "../pages/Support";
 import Register from "../features/auth/Register";
-
-import ReviewsDashboard from "../features/reviews/ReviewDashboard"; 
+import ReviewsDashboard from "../features/reviews/ReviewDashboard";
+import DashboardAdmin from "../features/dashboard/DashboardAdmin";
+import ChangePassword from "../features/settings/ChangePassword";
 
 const router = createBrowserRouter([
   { path: "/", element: <Home /> },
@@ -69,14 +69,23 @@ const router = createBrowserRouter([
         ],
       },
 
-      // PERFIL
+      // ------------------------
+      // PERFIL & CONFIGURACIÓN
+      // ------------------------
       { path: "profile", element: <Profile /> },
       { path: "users/:userId", element: <PublicProfile /> },
 
+      { path: "change-password", element: <ChangePassword /> },
+
+      // ------------------------
       // ADMIN
+      // ------------------------
       {
         element: <RoleProtected allow={["admin"]} />,
-        children: [{ path: "admin/users", element: <AdminUsers /> }],
+        children: [
+          { path: "admin/users", element: <AdminUsers /> },
+          { path: "admin/dashboard", element: <DashboardAdmin /> },
+        ],
       },
 
       // SOPORTE

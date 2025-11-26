@@ -18,7 +18,6 @@ import type {
 import { useNavigate, useParams } from "react-router-dom";
 import Card from "../../components/Card";
 
-// ✅ NUEVO: APIs multi-local
 import {
   getMyBusinesses,
   getLocationsByBusiness,
@@ -26,7 +25,6 @@ import {
   type BusinessLocation,
 } from "../../api/business";
 
-// ✅ NUEVO: validación perfil
 import { validateProfile } from "../../lib/validateProfile";
 import { normalizeRole } from "../../lib/roles";
 
@@ -36,7 +34,8 @@ type CreateJobOfferPayload = {
   location: string;
   job_type: JobType;
   description: string;
-  salary_range?: string | null;
+
+  salary_range?: number | null;
   requirements?: string | null;
   required_skills?: string | null;
   urgency?: UrgencyType;
@@ -48,7 +47,6 @@ type CreateJobOfferPayload = {
   is_active?: number;
   vacancies_total?: number;
 
-  // ✅ NUEVO
   business_id?: number | null;
   location_id?: number | null;
 };
@@ -88,7 +86,6 @@ export default function PostJob() {
   const [description, setDescription] = useState("");
   const [requirements, setRequirements] = useState("");
 
-  // Campos reales backend
   const [requiredSkills, setRequiredSkills] = useState("");
   const [urgency, setUrgency] = useState<UrgencyType>("NORMAL");
   const [vacanciesTotal, setVacanciesTotal] = useState<number>(1);
@@ -104,7 +101,6 @@ export default function PostJob() {
   const [isLoadingJob, setIsLoadingJob] = useState(false);
 
   // ==================================================
-  // ✅ NUEVO: estado multi-local
   // ==================================================
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [locationsByBiz, setLocationsByBiz] = useState<BusinessLocation[]>([]);
@@ -118,7 +114,6 @@ export default function PostJob() {
   const comunaEsValida = !comuna || COMUNAS_RM.includes(comuna);
 
   // ==================================================
-  // ✅ Cargar negocios del usuario (si es cafe/academy)
   // ==================================================
   useEffect(() => {
     const loadBusinesses = async () => {
@@ -142,7 +137,7 @@ export default function PostJob() {
   }, [u?.id, u?.role]);
 
   // ==================================================
-  // ✅ Cargar sedes al elegir negocio
+  // Cargar sedes al elegir negocio
   // ==================================================
   useEffect(() => {
     const loadLocations = async () => {
@@ -168,7 +163,7 @@ export default function PostJob() {
   }, [selectedBusinessId]);
 
   // ==================================================
-  // ✅ Autopoblar campos legacy al elegir sede
+  // Autopoblar campos legacy al elegir sede
   // ==================================================
   useEffect(() => {
     if (!selectedLocationId) return;
@@ -198,7 +193,9 @@ export default function PostJob() {
         setLocation(job.location ?? "");
         setJobType(job.job_type ?? "FULL_TIME");
 
-        setSalaryRange(job.salary_range ?? "");
+        setSalaryRange(
+          job.salary_range != null ? String(job.salary_range) : ""
+        );
         setDescription(job.description ?? "");
         setRequirements(job.requirements ?? "");
 
@@ -231,8 +228,6 @@ export default function PostJob() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!u) return toast.push("Debes iniciar sesión");
-
-    // ✅ VALIDAR PERFIL ANTES DE PUBLICAR
     const role = normalizeRole(u) as any;
     const v = validateProfile(u, role);
 
@@ -273,6 +268,15 @@ export default function PostJob() {
       return toast.push("Las vacantes deben ser al menos 1");
     }
 
+    const salaryRangeInt: number | null =
+      salaryRange.trim() === ""
+        ? null
+        : (() => {
+            const clean = salaryRange.replace(/[^0-9]/g, "");
+            const n = Number.parseInt(clean, 10);
+            return Number.isNaN(n) ? null : n;
+          })();
+
     setIsSending(true);
 
     try {
@@ -283,7 +287,7 @@ export default function PostJob() {
         job_type: jobType,
         description: description.trim(),
 
-        salary_range: salaryRange.trim() || null,
+        salary_range: salaryRangeInt,
         requirements: requirements.trim() || null,
         required_skills: requiredSkills.trim() || null,
 
@@ -321,9 +325,9 @@ export default function PostJob() {
       console.log("BACKEND ERROR RAW:", err);
       toast.push(
         err?.response?.data?.detail?.[0]?.msg ||
-        err?.response?.data?.message ||
-        err.message ||
-        "No se pudo guardar la vacante."
+          err?.response?.data?.message ||
+          err.message ||
+          "No se pudo guardar la vacante."
       );
     } finally {
       setIsSending(false);
@@ -342,7 +346,6 @@ export default function PostJob() {
         <Card className="p-4 text-sm">Cargando oferta...</Card>
       ) : (
         <form onSubmit={onSubmit} className="grid gap-3 max-w-2xl">
-
           {/* MULTI-LOCAL */}
           {loadingBusinesses ? (
             <Card className="p-3 text-sm">Cargando negocios...</Card>
@@ -396,7 +399,8 @@ export default function PostJob() {
               </label>
 
               <p className="text-xs text-gray-500">
-                Al elegir una sucursal, se autocompletan los datos de empresa y ubicación.
+                Al elegir una sucursal, se autocompletan los datos de empresa y
+                ubicación.
               </p>
             </div>
           ) : null}
@@ -456,9 +460,7 @@ export default function PostJob() {
                 disabled={inputsDisabledByMultiLocal}
               >
                 {comuna && !comunaEsValida && (
-                  <option value={comuna}>
-                    {comuna} (Comuna no válida)
-                  </option>
+                  <option value={comuna}>{comuna} (Comuna no válida)</option>
                 )}
 
                 <option value="">Selecciona comuna</option>
@@ -557,10 +559,9 @@ export default function PostJob() {
               inputMode="numeric"
             />
             <p className="text-xs text-gray-500">
-              Solo números (se guarda como texto).
+              Solo números (se guarda como valor numérico).
             </p>
           </label>
-
 
           <label className="block space-y-1">
             <span className="text-sm">Descripción*</span>

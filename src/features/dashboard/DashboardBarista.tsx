@@ -13,7 +13,6 @@ import { getAssignmentsByWorker, type Assignment } from "../../api/assignments";
 import { getReviewsByUser, type ReviewsByUserResponse } from "../../api/review";
 
 // Utils
-import { parseSalaryRange } from "../../lib/salary";
 import { exportToExcel } from "../../lib/exportExcel";
 
 // Recharts
@@ -27,11 +26,28 @@ import {
   CartesianGrid,
 } from "recharts";
 
-// Small KPI Card
-function KPICard({ label, value }: { label: string; value: string | number }) {
+// -------------------------------------------------------------------
+// Small KPI Card con colores
+// -------------------------------------------------------------------
+function KPICard({
+  label,
+  value,
+  color = "blue",
+}: {
+  label: string;
+  value: string | number;
+  color?: "blue" | "green" | "orange" | "gray";
+}) {
+  const colorMap: Record<string, string> = {
+    blue: "bg-blue-50 border-blue-200 text-blue-700",
+    green: "bg-green-50 border-green-200 text-green-700",
+    orange: "bg-orange-50 border-orange-200 text-orange-700",
+    gray: "bg-gray-50 border-gray-200 text-gray-700",
+  };
+
   return (
-    <Card className="p-4 flex flex-col">
-      <span className="text-sm text-gray-500">{label}</span>
+    <Card className={`p-4 flex flex-col border shadow ${colorMap[color]}`}>
+      <span className="text-sm">{label}</span>
       <span className="text-2xl font-bold">{value}</span>
     </Card>
   );
@@ -46,6 +62,10 @@ export default function DashboardBarista() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [reviews, setReviews] = useState<ReviewsByUserResponse | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // filtros de fecha
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   // -------------------------------------------------------------------
   // FETCH DATA
@@ -74,38 +94,61 @@ export default function DashboardBarista() {
   }, [userId]);
 
   // -------------------------------------------------------------------
+  // APLICAR FILTRO DE FECHA A LAS POSTULACIONES
+  // -------------------------------------------------------------------
+  const filteredApps = useMemo(() => {
+    if (!dateFrom && !dateTo) return applications;
+
+    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+    const to = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
+
+    return applications.filter((a) => {
+      const appAny = a as any;
+      const appliedRaw = appAny?.applied_at ?? (a as any).applied_at;
+      if (!appliedRaw) return true;
+
+      const applied = new Date(appliedRaw);
+
+      if (from && applied < from) return false;
+      if (to && applied > to) return false;
+
+      return true;
+    });
+  }, [applications, dateFrom, dateTo]);
+
+  // -------------------------------------------------------------------
   // METRICS
   // -------------------------------------------------------------------
   const metrics = useMemo(() => {
     if (loading) return null;
 
-    const totalApps = applications.length;
-    const rejected = applications.filter((a) => a.status === "rejected").length;
+    const totalApps = filteredApps.length;
+    const rejected = filteredApps.filter((a) => a.status === "rejected").length;
 
-    // activas = no rechazadas ni completadas
-    const active = applications.filter(
+    const active = filteredApps.filter(
       (a) => a.status !== "rejected" && a.status !== "completed_confirmed"
     ).length;
 
-    // completadas
-    const completed = applications.filter(
+    const completed = filteredApps.filter(
       (a) => a.status === "completed_confirmed"
     );
 
-    // monto ganado (salary_range viene embebido)
+    // monto ganado
     let montoGanado = 0;
     completed.forEach((a) => {
       const appAny = a as any;
-      const sr =
+
+      const raw =
         appAny?.job_offer_salary_range ??
         appAny?.salary_range ??
         appAny?.job_offer?.salary_range ??
-        null;
-      montoGanado += parseSalaryRange(sr);
-    });
+        0;
 
-    const ratingAvg = reviews?.rating_avg ?? 0;
-    const reviewsCount = reviews?.reviews_count ?? 0;
+      const numero = Number(raw);
+      if (!Number.isNaN(numero)) {
+        montoGanado += numero;
+      }
+    });
 
     return {
       totalApps,
@@ -113,26 +156,41 @@ export default function DashboardBarista() {
       rejected,
       completedCount: completed.length,
       montoGanado,
-      ratingAvg,
-      reviewsCount,
+      ratingAvg: reviews?.rating_avg ?? 0,
+      reviewsCount: reviews?.reviews_count ?? 0,
     };
-  }, [loading, applications, reviews]);
+  }, [loading, filteredApps, reviews]);
 
   // -------------------------------------------------------------------
-  // CHART DATA (postulaciones por estado)
+  // CHART DATA
   // -------------------------------------------------------------------
+  const statusLabels: Record<string, string> = {
+    pending: "Pendiente",
+    under_review: "En revisión",
+    interview_scheduled: "Entrevista agendada",
+    interviewed: "Entrevistado",
+    offered: "Oferta enviada",
+    hired: "Contratado",
+    rejected: "Rechazado",
+    completed_by_employer: "Completado por empleador",
+    completed_by_worker: "Completado por barista",
+    completed_confirmed: "Trabajo completado",
+    unknown: "Desconocido",
+  };
+
   const chartData = useMemo(() => {
     const counts: Record<string, number> = {};
-    applications.forEach((a) => {
+
+    filteredApps.forEach((a) => {
       const s = a.status ?? "unknown";
       counts[s] = (counts[s] ?? 0) + 1;
     });
 
     return Object.entries(counts).map(([status, count]) => ({
-      status,
+      status: statusLabels[status] ?? status,
       count,
     }));
-  }, [applications]);
+  }, [filteredApps]);
 
   if (loading || !metrics)
     return <div className="p-6">Cargando Dashboard Barista…</div>;
@@ -142,29 +200,86 @@ export default function DashboardBarista() {
   // -------------------------------------------------------------------
   return (
     <div className="space-y-6 p-4">
-      <h1 className="text-2xl font-semibold">Dashboard Barista</h1>
-      <p className="text-sm text-gray-500">Resumen de tu actividad</p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard Barista</h1>
+          <p className="text-sm text-gray-500">Resumen de tu actividad</p>
+        </div>
+
+        {/* Filtros de fecha */}
+        <div className="flex gap-4">
+          <div className="flex flex-col text-sm">
+            <label className="text-gray-600 mb-1">Desde</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            />
+          </div>
+          <div className="flex flex-col text-sm">
+            <label className="text-gray-600 mb-1">Hasta</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            />
+          </div>
+        </div>
+      </div>
 
       {/* KPI GRID */}
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
-        <KPICard label="Postulaciones Totales" value={metrics.totalApps} />
-        <KPICard label="Activas" value={metrics.active} />
-        <KPICard label="Rechazadas" value={metrics.rejected} />
-        <KPICard label="Completadas" value={metrics.completedCount} />
-        <KPICard label="Monto Ganado" value={`$${metrics.montoGanado}`} />
-        <KPICard label="Rating Promedio" value={metrics.ratingAvg.toFixed(1)} />
-        <KPICard label="Reseñas Recibidas" value={metrics.reviewsCount} />
+        <KPICard
+          label="Postulaciones Totales"
+          value={metrics.totalApps}
+          color="blue"
+        />
+        <KPICard label="Activas" value={metrics.active} color="green" />
+        <KPICard
+          label="Rechazadas"
+          value={metrics.rejected}
+          color="orange"
+        />
+        <KPICard
+          label="Completadas"
+          value={metrics.completedCount}
+          color="green"
+        />
+        <KPICard
+          label="Monto Ganado"
+          value={
+            metrics.montoGanado > 0
+              ? `$${metrics.montoGanado.toLocaleString("es-CL")}`
+              : "$0"
+          }
+          color="green"
+        />
+        <KPICard
+          label="Rating Promedio"
+          value={metrics.ratingAvg.toFixed(1)}
+          color="gray"
+        />
+        <KPICard
+          label="Reseñas Recibidas"
+          value={metrics.reviewsCount}
+          color="blue"
+        />
       </div>
 
-      {/* GRÁFICO: Postulaciones por Estado */}
+      {/* GRÁFICO */}
       <Card className="p-4">
         <h2 className="font-semibold mb-2">Postulaciones por Estado</h2>
         <div className="text-xs text-gray-500 mb-3">
-          Distribución de tus postulaciones según su estado actual.
+          Distribución de tus postulaciones según su estado actual
+          {dateFrom || dateTo ? " (filtradas por fecha)." : "."}
         </div>
 
         {chartData.length === 0 ? (
-          <div className="text-sm text-gray-500">Aún no tienes postulaciones.</div>
+          <div className="text-sm text-gray-500">
+            Aún no tienes postulaciones en el rango seleccionado.
+          </div>
         ) : (
           <div style={{ width: "100%", height: 280 }}>
             <ResponsiveContainer>
@@ -183,7 +298,7 @@ export default function DashboardBarista() {
         )}
       </Card>
 
-      {/* Tabla de últimas postulaciones */}
+      {/* Tabla */}
       <Card className="p-4">
         <h2 className="font-semibold mb-3">Últimas Postulaciones</h2>
 
@@ -197,8 +312,9 @@ export default function DashboardBarista() {
             </tr>
           </thead>
           <tbody>
-            {applications.slice(0, 10).map((a) => {
+            {filteredApps.slice(0, 10).map((a) => {
               const appAny = a as any;
+
               return (
                 <tr key={a.id} className="border-b">
                   <td className="py-2">
@@ -206,12 +322,18 @@ export default function DashboardBarista() {
                       appAny?.job_offer?.title ??
                       `Oferta #${a.job_offer_id}`}
                   </td>
+
                   <td className="py-2">
                     {appAny?.job_offer_company ??
+                      appAny?.company ??
                       appAny?.job_offer?.company ??
-                      "—"}
+                      "Sin info"}
                   </td>
-                  <td className="py-2">{a.status}</td>
+
+                  <td className="py-2">
+                    {statusLabels[a.status] ?? a.status}
+                  </td>
+
                   <td className="py-2">
                     {appAny?.applied_at
                       ? new Date(appAny.applied_at).toLocaleDateString("es-CL")
@@ -224,25 +346,32 @@ export default function DashboardBarista() {
         </table>
       </Card>
 
-      {/* EXPORT EXCEL */}
+      {/* Export Excel */}
       <Button
         onClick={() => {
-          const rows: any[] = applications.map((a) => {
+          const rows: any[] = filteredApps.map((a) => {
             const appAny = a as any;
-            const salario = appAny?.job_offer_salary_range ??
-                            appAny?.salary_range ??
-                            appAny?.job_offer?.salary_range ??
-                            "";
+
+            const rawSalario =
+              appAny?.job_offer_salary_range ??
+              appAny?.salary_range ??
+              appAny?.job_offer?.salary_range ??
+              0;
 
             return {
               Barista: baristaName,
               AplicacionID: a.id,
               OfertaID: a.job_offer_id,
-              Oferta: appAny?.job_offer_title ?? appAny?.job_offer?.title ?? "",
-              Cafeteria: appAny?.job_offer_company ?? appAny?.job_offer?.company ?? "",
-              Estado: a.status,
+              Oferta:
+                appAny?.job_offer_title ?? appAny?.job_offer?.title ?? "",
+              Cafeteria:
+                appAny?.job_offer_company ??
+                appAny?.company ??
+                appAny?.job_offer?.company ??
+                "",
+              Estado: statusLabels[a.status] ?? a.status,
               FechaPostulacion: appAny?.applied_at ?? "",
-              Salario: salario,
+              Salario: rawSalario,
             };
           });
 

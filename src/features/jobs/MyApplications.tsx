@@ -1,5 +1,6 @@
 // src/features/jobs/MyApplications.tsx
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import AppLayout from "../../components/AppLayout";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
@@ -26,13 +27,15 @@ import {
 import ReviewForm from "../reviews/ReviewForm";
 import { notify } from "../../lib/notify";
 
-// ✅ NUEVO: reviews
 import { getReviewsByUser, type Review } from "../../api/review";
 
 function fmtDate(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("es-CL", { dateStyle: "medium", timeStyle: "short" });
+  return d.toLocaleString("es-CL", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 // estados a UI (badge)
@@ -74,6 +77,7 @@ function getJobTypeImage(jobType?: string | null): string {
 export default function MyApplications() {
   const u = getUserMock();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
 
   const userId = useMemo(() => {
     if (!u?.id) return null;
@@ -83,14 +87,23 @@ export default function MyApplications() {
 
   const userRole = u?.role;
 
+  // ID de postulación a resaltar/abrir desde la URL
+  const highlightAppId = useMemo(() => {
+    const v = searchParams.get("app");
+    if (!v) return null;
+    const n = Number(v);
+    return Number.isNaN(n) ? null : n;
+  }, [searchParams]);
+
   const [applications, setApplications] = useState<MyApplication[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [jobs, setJobs] = useState<Record<number, JobOffer>>({});
   const [loading, setLoading] = useState(true);
 
-  const [reviewJobId, setReviewJobId] = useState<number | null>(null);
+  // applicationId cuyo formulario de reseña está abierto
+  const [reviewAppId, setReviewAppId] = useState<number | null>(null);
 
-  // ✅ NUEVO: map reviews recibidas por application_id
+  // reviews recibidas por application_id
   const [reviewsByAppId, setReviewsByAppId] = useState<Record<number, Review>>(
     {}
   );
@@ -112,22 +125,23 @@ export default function MyApplications() {
         const asg = await getAssignmentsByWorker(userId);
         setAssignments(asg);
 
-        // ✅ jobs
+        // ofertas
         const jobMap: Record<number, JobOffer> = {};
         for (const app of apps) {
           try {
             jobMap[app.job_offer_id] = await getJobOfferById(app.job_offer_id);
-          } catch {}
+          } catch {
+            // ignoramos errores individuales
+          }
         }
         setJobs(jobMap);
 
-        // ✅ NUEVO: traer reseñas recibidas por este barista
+        // reseñas recibidas por este barista
         try {
           const res = await getReviewsByUser(userId);
-
           const map: Record<number, Review> = {};
+
           for (const r of res.reviews || []) {
-            // indexar por postulación
             if (r.application_id != null) {
               map[Number(r.application_id)] = r;
             }
@@ -145,6 +159,23 @@ export default function MyApplications() {
 
     load();
   }, [userId, toast]);
+
+  // Si viene ?app=ID en la URL, abrir automáticamente el formulario de reseña
+  useEffect(() => {
+    if (!highlightAppId) return;
+    if (!applications.length) return;
+
+    const app = applications.find((a) => a.id === highlightAppId);
+    if (!app) return;
+
+    // Debe existir assignment (trabajo completado)
+    const hasAssignment = assignments.some(
+      (asg) => asg.job_offer_id === app.job_offer_id
+    );
+    if (!hasAssignment) return;
+
+    setReviewAppId(highlightAppId);
+  }, [highlightAppId, applications, assignments]);
 
   async function openOffer(jobOfferId: number) {
     try {
@@ -201,11 +232,18 @@ export default function MyApplications() {
               ? "Seleccionado"
               : st.label;
 
-            // ✅ reseña del empleador hacia este barista, ligada a ESTA postulación
+            // reseña del empleador hacia este barista, ligada a ESTA postulación
             const employerReview = reviewsByAppId[app.id];
 
+            const isHighlighted = highlightAppId === app.id;
+
             return (
-              <Card key={app.id} className="p-0 overflow-hidden">
+              <Card
+                key={app.id}
+                className={`p-0 overflow-hidden ${
+                  isHighlighted ? "ring-2 ring-purple-500" : ""
+                }`}
+              >
                 {/* header delgado con imagen */}
                 <div className="relative h-20 bg-gray-100">
                   <img
@@ -272,9 +310,9 @@ export default function MyApplications() {
                         {!!(app as any).rejected_at && (
                           <div className="mt-1 text-xs text-gray-500">
                             Rechazado el{" "}
-                            {new Date((app as any).rejected_at).toLocaleString(
-                              "es-CL"
-                            )}
+                            {new Date(
+                              (app as any).rejected_at
+                            ).toLocaleString("es-CL")}
                           </div>
                         )}
                       </div>
@@ -287,7 +325,8 @@ export default function MyApplications() {
                         {!employerReview ? (
                           <>
                             <div className="text-sm text-gray-600 mt-1">
-                              Aquí podrás ver tu reseña y calificación cuando esté lista.
+                              Aquí podrás ver tu reseña y calificación cuando
+                              esté lista.
                             </div>
                             <div className="mt-2 text-xs text-gray-500">
                               ⏳ Aún no te reseñan
@@ -300,7 +339,9 @@ export default function MyApplications() {
                             </div>
 
                             <div className="mt-2 text-yellow-500 text-lg">
-                              {"★".repeat(Math.round(employerReview.rating))}
+                              {"★".repeat(
+                                Math.round(employerReview.rating)
+                              )}
                               {"☆".repeat(
                                 5 - Math.round(employerReview.rating)
                               )}
@@ -383,14 +424,12 @@ export default function MyApplications() {
                       <Button
                         variant="secondary"
                         onClick={() =>
-                          setReviewJobId(
-                            reviewJobId === app.job_offer_id
-                              ? null
-                              : app.job_offer_id
+                          setReviewAppId(
+                            reviewAppId === app.id ? null : app.id
                           )
                         }
                       >
-                        {reviewJobId === app.job_offer_id
+                        {reviewAppId === app.id
                           ? "Cerrar evaluación"
                           : "Evaluar cafetería"}
                       </Button>
@@ -398,8 +437,8 @@ export default function MyApplications() {
                   </div>
                 </div>
 
-                {/* Form evaluacion */}
-                {assignment && reviewJobId === app.job_offer_id && job && (
+                {/* Form evaluación */}
+                {assignment && reviewAppId === app.id && job && (
                   <div className="px-4 pb-4">
                     <div className="border-t pt-4">
                       <ReviewForm
@@ -410,25 +449,29 @@ export default function MyApplications() {
                         role="barista"
                         onDone={async () => {
                           toast.push("Evaluación enviada");
-                          setReviewJobId(null);
+                          setReviewAppId(null);
 
-                        try {
-                          if (userId == null) return; // <-- guard clause
+                          // refrescar reseñas para que se vea reflejado
+                          try {
+                            if (userId == null) return;
 
-                          const res = await getReviewsByUser(userId);
-                          const map: Record<number, Review> = {};
+                            const res = await getReviewsByUser(userId);
+                            const map: Record<number, Review> = {};
 
-                          for (const r of res.reviews || []) {
-                            if (r.application_id != null) {
-                              map[Number(r.application_id)] = r;
+                            for (const r of res.reviews || []) {
+                              if (r.application_id != null) {
+                                map[Number(r.application_id)] = r;
+                              }
                             }
-                          }
 
-                          setReviewsByAppId(map);
-                        } catch (e) {
-                          console.error("No se pudo refrescar reviews", e);
-                        }
-                                                }}
+                            setReviewsByAppId(map);
+                          } catch (e) {
+                            console.error(
+                              "No se pudo refrescar reviews",
+                              e
+                            );
+                          }
+                        }}
                       />
                     </div>
                   </div>
@@ -490,7 +533,10 @@ export default function MyApplications() {
             </div>
 
             <div className="p-4 border-t flex justify-end">
-              <Button variant="primary" onClick={() => setShowOfferModal(false)}>
+              <Button
+                variant="primary"
+                onClick={() => setShowOfferModal(false)}
+              >
                 Cerrar
               </Button>
             </div>

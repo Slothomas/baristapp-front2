@@ -16,6 +16,13 @@ import {
 
 import ReviewForm from "./ReviewForm";
 
+// ✅ API reseñas
+import {
+  getReviewsByUser,
+  type Review,
+  type ReviewsByUserResponse,
+} from "../../api/review";
+
 // cast temporal si ReviewForm aún no tiene applicationId en Props
 const ReviewFormAny = ReviewForm as any;
 
@@ -54,6 +61,18 @@ function formatStatus(status: string): string {
   return map[status] || status;
 }
 
+// helper simple para mostrar estrellas
+function renderStars(rating: number) {
+  const full = "★".repeat(rating);
+  const empty = "☆".repeat(5 - rating);
+  return (
+    <span className="text-yellow-500 text-lg">
+      {full}
+      <span className="text-gray-300">{empty}</span>
+    </span>
+  );
+}
+
 export default function ReviewsDashboard() {
   const u = getUserMock();
   const toast = useToast();
@@ -76,44 +95,63 @@ export default function ReviewsDashboard() {
     baristaId: number;
   } | null>(null);
 
+  // ✅ reseñas recibidas por la cafetería (reviewee_id = userId), mapeadas por application_id
+  const [reviewsByApplication, setReviewsByApplication] = useState<
+    Record<number, Review[]>
+  >({});
+  const [selectedReview, setSelectedReview] = useState<Review | null>(null);
+
   useEffect(() => {
     if (!u || !isCafe) return;
 
     async function fetchData() {
       setLoading(true);
       try {
+        // 1) Ofertas del usuario
         const allOffers = await getAllJobOffers();
         const myOffers = allOffers.filter((o: any) =>
           isOfferOwnedByUser(o, userId)
         );
-
         setOffers(myOffers);
 
+        // 2) Postulaciones por oferta (solo estados post-trabajo)
         const byOffer: Record<number, Applicant[]> = {};
-
         for (const offer of myOffers) {
           const apps = await getApplicantsForJob(offer.id);
 
-          const postApps = apps.filter((a) =>
+          const postApps = apps.filter((a: Applicant) =>
             POST_WORK_STATUSES.includes(a.status as ApplicationStatus)
           );
 
           if (postApps.length) byOffer[offer.id] = postApps;
         }
-
         setAppsByOffer(byOffer);
-
         setOpenOfferIds(new Set(Object.keys(byOffer).map((k) => Number(k))));
+
+        // 3) Reseñas que ha recibido esta cafetería
+        const reviewsResp: ReviewsByUserResponse = await getReviewsByUser(
+          userId
+        );
+
+        const byApp: Record<number, Review[]> = {};
+        for (const r of reviewsResp.reviews) {
+          const appId = r.application_id;
+          if (!appId) continue;
+          if (!byApp[appId]) byApp[appId] = [];
+          byApp[appId].push(r);
+        }
+        setReviewsByApplication(byApp);
       } catch (err: any) {
         console.error(err);
-        toast.push(err.message || "No se pudo cargar trabajos realizados.");
+        toast.push(err.message || "No se pudo cargar trabajos y reseñas.");
       } finally {
         setLoading(false);
       }
     }
 
     fetchData();
-  }, [userId]); // ok
+    // 👇 solo se recalcula cuando cambia usuario o rol, no en cada render
+  }, [userId, isCafe]);
 
   const offersWithApps = useMemo(() => {
     return offers.filter((o) => appsByOffer[o.id]?.length);
@@ -127,7 +165,7 @@ export default function ReviewsDashboard() {
       await completeApplication(app.id, u.id, "employer");
 
       const apps = await getApplicantsForJob(app.job_offer_id);
-      const postApps = apps.filter((a) =>
+      const postApps = apps.filter((a: Applicant) =>
         POST_WORK_STATUSES.includes(a.status as ApplicationStatus)
       );
 
@@ -168,14 +206,13 @@ export default function ReviewsDashboard() {
             const isOpen = openOfferIds.has(offer.id);
 
             const pendientesConfirmar = apps.filter(
-              (a) => a.status === "completed_by_worker"
+              (a: Applicant) => a.status === "completed_by_worker"
             ).length;
 
-            const pendientesResena = apps.filter((a) => {
+            const pendientesResena = apps.filter((a: Applicant) => {
               const ax = a as any;
               return (
-                a.status === "completed_confirmed" &&
-                !ax.employer_reviewed
+                a.status === "completed_confirmed" && !ax.employer_reviewed
               );
             }).length;
 
@@ -208,7 +245,7 @@ export default function ReviewsDashboard() {
 
                 {isOpen && (
                   <div className="mt-4 grid gap-3">
-                    {apps.map((app) => {
+                    {apps.map((app: Applicant) => {
                       const ax = app as any; // para flags sin romper TS
                       const isWaitingMe =
                         app.status === "completed_by_worker";
@@ -219,6 +256,11 @@ export default function ReviewsDashboard() {
 
                       const alreadyReviewedByMe = !!ax.employer_reviewed;
                       const baristaReviewed = !!ax.worker_reviewed;
+
+                      // reseñas que tiene ESTA aplicación hacia la cafetería
+                      const reviewsForApp =
+                        reviewsByApplication[app.id] || [];
+                      const reviewFromBarista = reviewsForApp[0] || null;
 
                       return (
                         <div
@@ -238,6 +280,13 @@ export default function ReviewsDashboard() {
                                 {baristaReviewed
                                   ? "✅ Barista ya dejó su reseña"
                                   : "⏳ Barista aún no reseña"}
+                              </div>
+                            )}
+
+                            {reviewFromBarista && (
+                              <div className="mt-1 flex items-center gap-2 text-xs text-gray-600">
+                                <span>Tu calificación:</span>
+                                {renderStars(reviewFromBarista.rating)}
                               </div>
                             )}
                           </div>
@@ -280,6 +329,17 @@ export default function ReviewsDashboard() {
                                 ✅ Ya reseñaste
                               </span>
                             )}
+
+                            {reviewFromBarista && (
+                              <Button
+                                variant="secondary"
+                                onClick={() =>
+                                  setSelectedReview(reviewFromBarista)
+                                }
+                              >
+                                Ver reseña
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -292,7 +352,7 @@ export default function ReviewsDashboard() {
         </div>
       )}
 
-      {/* Modal reseña */}
+      {/* Modal reseña que deja la cafetería sobre el barista */}
       {reviewTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
@@ -321,7 +381,7 @@ export default function ReviewsDashboard() {
                   const apps = await getApplicantsForJob(
                     reviewTarget.jobOfferId
                   );
-                  const postApps = apps.filter((a) =>
+                  const postApps = apps.filter((a: Applicant) =>
                     POST_WORK_STATUSES.includes(
                       a.status as ApplicationStatus
                     )
@@ -336,6 +396,43 @@ export default function ReviewsDashboard() {
                 }
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Modal para VER la reseña que el barista dejó a la cafetería */}
+      {selectedReview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">Reseña del barista</h2>
+              <button
+                className="text-xl"
+                onClick={() => setSelectedReview(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-3">{renderStars(selectedReview.rating)}</div>
+
+            {selectedReview.topic && (
+              <div className="mb-2 text-sm font-semibold text-gray-700">
+                {selectedReview.topic}
+              </div>
+            )}
+
+            <p className="text-sm text-gray-700 whitespace-pre-line">
+              {selectedReview.comment || "Sin comentario escrito."}
+            </p>
+
+            <div className="mt-4 text-xs text-gray-500">
+              Fecha:{" "}
+              {new Date(selectedReview.created_at).toLocaleString("es-CL", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </div>
           </div>
         </div>
       )}

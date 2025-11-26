@@ -1,9 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import AppLayout from "../../components/AppLayout";
 import Card from "../../components/Card";
 import Button from "../../components/Button";
 import { getUserMock } from "../../api/auth";
 import { useToast } from "../../components/Toast";
-import { useEffect, useMemo, useState } from "react";
 
 import {
   getJobsByRestaurant,
@@ -45,7 +47,6 @@ import {
   getCertificateDownloadUrl,
   type ApiCertificate,
 } from "../../api/certificate";
-import { useNavigate } from "react-router-dom";
 
 function Stars({ value = 0 }: { value?: number }) {
   const v = Math.max(0, Math.min(5, Math.round(value)));
@@ -236,7 +237,9 @@ export default function ManageJobs() {
           .filter((x) => !Number.isNaN(x));
 
         setFavoriteWorkerIds(new Set(ids));
-      } catch {}
+      } catch {
+        // silencioso
+      }
     };
     loadFavWorkers();
   }, [userId, userRole]);
@@ -307,7 +310,9 @@ export default function ManageJobs() {
             worker_id: application.user_id,
           },
         });
-      } catch {}
+      } catch {
+        // silencioso
+      }
 
       setApplicants((prev) =>
         prev.map((a) =>
@@ -369,8 +374,8 @@ export default function ManageJobs() {
     } catch (err: any) {
       console.error("Error completando postulación:", err);
       toast.push(
-        err.response?.data?.detail ||
-          err.message ||
+        err?.response?.data?.detail ||
+          err?.message ||
           "No se pudo actualizar."
       );
     } finally {
@@ -411,7 +416,9 @@ export default function ManageJobs() {
           action: "rejected",
           description: `Postulación rechazada. Motivo: ${reason}`,
         });
-      } catch {}
+      } catch {
+        // silencioso
+      }
 
       setApplicants((prev) =>
         prev.map((a) =>
@@ -548,6 +555,13 @@ export default function ManageJobs() {
     const filled = Number(selectedJob.vacancies_filled ?? 0);
     return Math.max(0, total - filled);
   }, [selectedJob]);
+
+  // ✅ Contactar por WhatsApp con número fijo de demo
+  const handleContactWhatsApp = () => {
+    const digits = "999999999"; // número de ejemplo
+    const url = `https://wa.me/56${digits}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   if (!u) {
     return (
@@ -846,6 +860,7 @@ export default function ManageJobs() {
 
               {!loadingProfile && selectedProfile && (
                 <>
+                  {/* CABECERA */}
                   <div className="flex items-center gap-4">
                     <div className="h-16 w-16 rounded-full bg-gray-200 overflow-hidden grid place-items-center">
                       {selectedProfile.avatar_url ? (
@@ -908,6 +923,7 @@ export default function ManageJobs() {
                     </div>
                   </div>
 
+                  {/* BIO */}
                   {selectedProfile.bio && (
                     <Card className="p-4 text-sm">
                       <div className="text-gray-600 font-medium mb-1">Bio</div>
@@ -915,8 +931,108 @@ export default function ManageJobs() {
                     </Card>
                   )}
 
-                  {/* ... resto modal sin cambios ... */}
+                  {/* DATOS DE PERFIL */}
+                  <section className="grid gap-2 text-sm">
+                    <h3 className="text-base font-semibold">
+                      Información de perfil
+                    </h3>
 
+                    <dl className="space-y-1">
+                      {(selectedProfile as any).years_experience != null && (
+                        <div className="flex gap-2">
+                          <dt className="font-medium w-40">Experiencia</dt>
+                          <dd>
+                            {(selectedProfile as any).years_experience} años
+                          </dd>
+                        </div>
+                      )}
+
+                      {(selectedProfile as any).rate_hour != null && (
+                        <div className="flex gap-2">
+                          <dt className="font-medium w-40">Tarifa hora</dt>
+                          <dd>
+                            $
+                            {Number(
+                              (selectedProfile as any).rate_hour
+                            ).toLocaleString("es-CL")}
+                          </dd>
+                        </div>
+                      )}
+
+                      {(selectedProfile as any).min_shift_rate != null && (
+                        <div className="flex gap-2">
+                          <dt className="font-medium w-40">
+                            Mínimo por turno
+                          </dt>
+                          <dd>
+                            $
+                            {Number(
+                              (selectedProfile as any).min_shift_rate
+                            ).toLocaleString("es-CL")}
+                          </dd>
+                        </div>
+                      )}
+
+                      {(() => {
+                        const rawSkills = (selectedProfile as any).skills;
+                        if (!rawSkills) return null;
+
+                        const skills = Array.isArray(rawSkills)
+                          ? rawSkills.join(", ")
+                          : String(rawSkills);
+
+                        return (
+                          <div className="flex gap-2">
+                            <dt className="font-medium w-40">Habilidades</dt>
+                            <dd>{skills}</dd>
+                          </div>
+                        );
+                      })()}
+                    </dl>
+                  </section>
+
+                  {/* CERTIFICADOS */}
+                  <section className="grid gap-2">
+                    <h3 className="text-base font-semibold">Certificados</h3>
+
+                    {loadingCerts ? (
+                      <Card className="p-3 text-sm text-gray-600">
+                        Cargando certificados...
+                      </Card>
+                    ) : certificates.length === 0 ? (
+                      <Card className="p-3 text-sm text-gray-600">
+                        Sin certificados cargados.
+                      </Card>
+                    ) : (
+                      <div className="grid gap-2">
+                        {certificates.map((c) => (
+                          <Card
+                            key={c.id}
+                            className="p-3 flex items-center justify-between"
+                          >
+                            <div>
+                              <div className="text-sm font-medium">
+                                {c.file_name_original || "Certificado"}
+                              </div>
+                              {c.uploaded_at && (
+                                <div className="text-xs text-gray-500">
+                                  Subido: {fmtDate(c.uploaded_at as any)}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              variant="secondary"
+                              onClick={() => handleDownloadCert(c.id)}
+                            >
+                              Ver certificado
+                            </Button>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* RESEÑAS */}
                   <section className="grid gap-2">
                     <h3 className="text-base font-semibold">Reseñas</h3>
 
@@ -959,13 +1075,11 @@ export default function ManageJobs() {
               )}
             </div>
 
+            {/* FOOTER MODAL */}
             <div className="border-t p-4 flex flex-wrap gap-2 justify-end bg-white sticky bottom-0 z-10">
-              <a
-                href="/app/support"
-                className="inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm hover:bg-gray-100"
-              >
+              <Button variant="secondary" onClick={handleContactWhatsApp}>
                 Contactar
-              </a>
+              </Button>
 
               <Button
                 variant="primary"
@@ -978,7 +1092,9 @@ export default function ManageJobs() {
 
                     await handleAcceptApplicant(fullApplicant);
                     closeProfileModal();
-                  } catch {}
+                  } catch {
+                    // silencioso
+                  }
                 }}
                 disabled={
                   updatingStatus[selectedApplicant.id] ||

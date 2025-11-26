@@ -11,13 +11,17 @@ import { getUserMock } from "../../api/auth";
 
 import { fetchUserByEmail, updateUserProfile } from "../../api/users";
 import { fetchProfile, upsertProfile, uploadAvatar } from "../../api/profile";
+import {
+  getReviewsByUser,
+  type ReviewsByUserResponse,
+} from "../../api/review";
 
 type ProfileRole = "barista" | "cafe" | "academy" | "admin";
 
 type ProfileData = {
   name: string;
   role: ProfileRole;
-  contact_number: string; // ✅ NUEVO (snake_case recomendado)
+  contact_number: string;
   avatar?: string;
   years?: number;
   skills: string[];
@@ -26,15 +30,15 @@ type ProfileData = {
   // gig-economy
   region?: string;
   comuna?: string;
-  availability_json?: any; // puede ser objeto o string temporal
+  availability_json?: any;
   rate_hour?: number;
   min_shift_rate?: number;
   business_name?: string;
   business_type?: string;
 
-  // calculados backend
-  rating_avg?: number | null;
-  reviews_count?: number | null;
+  // calculados backend (si no hay datos => 0 y 0)
+  rating_avg: number;
+  reviews_count: number;
 };
 
 // helper para normalizar rol desde backend
@@ -79,7 +83,7 @@ export default function Profile() {
   const [form, setForm] = useState<ProfileData>({
     name: "",
     role: "barista",
-    contact_number: "", // ✅ NUEVO
+    contact_number: "",
     avatar: undefined,
     years: undefined,
     skills: [],
@@ -93,8 +97,8 @@ export default function Profile() {
     business_name: "",
     business_type: "",
 
-    rating_avg: null,
-    reviews_count: null,
+    rating_avg: 0,
+    reviews_count: 0,
   });
 
   const [errors, setErrors] = useState<{ name?: string; contact_number?: string }>();
@@ -120,14 +124,13 @@ export default function Profile() {
 
         let nameFromUser = "";
         let roleFromUser: ProfileRole = "barista";
-        let contactFromUser = ""; // ✅ NUEVO
+        let contactFromUser = "";
 
         if (userRes.status === "fulfilled") {
           const user = userRes.value;
           nameFromUser = user.user ?? "";
           roleFromUser = normalizeRole(user.clave ?? user.clave);
 
-          // ✅ si backend trae contact_number / contactNumber / phone
           contactFromUser =
             (user as any).contact_number ??
             (user as any).contactNumber ??
@@ -147,8 +150,8 @@ export default function Profile() {
         let min_shift_rate: number | undefined = undefined;
         let business_name = "";
         let business_type = "";
-        let rating_avg: number | null = null;
-        let reviews_count: number | null = null;
+        let rating_avg = 0;
+        let reviews_count = 0;
 
         if (profileRes.status === "fulfilled") {
           const p = profileRes.value;
@@ -166,9 +169,11 @@ export default function Profile() {
             p.min_shift_rate != null ? Number(p.min_shift_rate) : undefined;
           business_name = p.business_name ?? "";
           business_type = p.business_type ?? "";
-          rating_avg = p.rating_avg != null ? Number(p.rating_avg) : null;
+
+          rating_avg =
+            p.rating_avg != null ? Number(p.rating_avg) : 0;
           reviews_count =
-            p.reviews_count != null ? Number(p.reviews_count) : null;
+            p.reviews_count != null ? Number(p.reviews_count) : 0;
 
           if (!nameFromUser && p.full_name) {
             nameFromUser = p.full_name;
@@ -178,7 +183,7 @@ export default function Profile() {
         setForm({
           name: nameFromUser,
           role: roleFromUser,
-          contact_number: contactFromUser, // ✅ NUEVO
+          contact_number: contactFromUser,
           years,
           skills,
           bio,
@@ -204,6 +209,32 @@ export default function Profile() {
 
     loadProfile();
   }, [email, userId, toast]);
+
+  // =========================================================
+  // Cargar rating real desde /reviews/user/{id}
+  // =========================================================
+  useEffect(() => {
+    if (userId == null) return;
+
+    async function loadRating(uid: number) {
+      try {
+        const res: ReviewsByUserResponse = await getReviewsByUser(uid);
+        setForm((f) => ({
+          ...f,
+          rating_avg:
+            typeof res.rating_avg === "number" ? res.rating_avg : f.rating_avg,
+          reviews_count:
+            typeof res.reviews_count === "number"
+              ? res.reviews_count
+              : f.reviews_count,
+        }));
+      } catch (err) {
+        console.error("Error cargando rating de usuario:", err);
+      }
+    }
+
+    loadRating(userId);
+  }, [userId]);
 
   // =========================================================
   // Subir avatar
@@ -243,7 +274,6 @@ export default function Profile() {
 
     if (!form.name.trim()) errs.name = "Ingresa un nombre";
 
-    // ✅ Validación contacto
     if (!form.contact_number.trim())
       errs.contact_number = "Ingresa tu número de contacto";
     else if (!validatePhone(form.contact_number.trim()))
@@ -263,7 +293,7 @@ export default function Profile() {
       await updateUserProfile(email, {
         name: form.name.trim(),
         role: form.role,
-        contact_number: form.contact_number.trim(), // ✅ NUEVO
+        contact_number: form.contact_number.trim(),
       });
 
       await upsertProfile(userId, {
@@ -277,7 +307,6 @@ export default function Profile() {
         region: form.region || undefined,
         comuna: form.comuna || undefined,
 
-        // ✅ solo mandamos JSON válido
         availability_json: safeJsonForBackend(form.availability_json),
 
         rate_hour:
@@ -302,6 +331,8 @@ export default function Profile() {
   // =========================================================
   // Render
   // =========================================================
+  const hasRating = form.reviews_count > 0;
+
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto">
@@ -349,16 +380,10 @@ export default function Profile() {
               <Card className="p-4 bg-gray-50">
                 <div className="text-sm text-gray-700">
                   Rating promedio:{" "}
-                  <b>
-                    {form.rating_avg != null
-                      ? form.rating_avg.toFixed(1)
-                      : "—"}
-                  </b>{" "}
-                  / 5
+                  <b>{hasRating ? form.rating_avg.toFixed(1) : "—"}</b> / 5
                 </div>
                 <div className="text-sm text-gray-700">
-                  Reseñas recibidas:{" "}
-                  <b>{form.reviews_count != null ? form.reviews_count : 0}</b>
+                  Reseñas recibidas: <b>{form.reviews_count}</b>
                 </div>
               </Card>
 
@@ -372,7 +397,6 @@ export default function Profile() {
                 required
               />
 
-              {/* ✅ NUEVO CONTACTO */}
               <Input
                 label="Número de contacto"
                 placeholder="+56912345678"
@@ -568,37 +592,7 @@ export default function Profile() {
                 />
               </label>
 
-              {/* Disponibilidad JSON libre */}
-              <label className="block space-y-1">
-                <span className="text-sm text-gray-700 font-medium">
-                  Disponibilidad (JSON)
-                </span>
-                <textarea
-                  rows={3}
-                  className="w-full border rounded-lg p-2 resize-none font-mono text-xs"
-                  placeholder='{"days":["Mon","Tue"],"hours":["09:00-18:00"]}'
-                  value={
-                    form.availability_json
-                      ? typeof form.availability_json === "string"
-                        ? form.availability_json
-                        : JSON.stringify(form.availability_json)
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      availability_json: e.target.value,
-                    }))
-                  }
-                />
-                {typeof form.availability_json === "string" &&
-                  form.availability_json.trim() !== "" &&
-                  safeJsonForBackend(form.availability_json) === undefined && (
-                    <span className="text-xs text-red-600">
-                      JSON inválido. Corrígelo para poder guardarlo.
-                    </span>
-                  )}
-              </label>
+              {/* Bloque de Disponibilidad (JSON) eliminado del formulario */}
 
               <div className="flex gap-3 justify-end">
                 <Button type="submit" disabled={saving}>

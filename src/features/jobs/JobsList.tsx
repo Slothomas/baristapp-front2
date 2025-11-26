@@ -17,7 +17,7 @@ import {
   applyToJob,
   getMyApplications,
   type MyApplication,
-  completeApplication, // ✅ NUEVO
+  completeApplication,
 } from "../../api/jobApplication";
 
 import { notify } from "../../lib/notify";
@@ -28,7 +28,6 @@ import {
   removeOfferFromFavorites,
 } from "../../api/favorites";
 
-// ✅ NUEVO: validación perfil
 import { validateProfile } from "../../lib/validateProfile";
 import { normalizeRole } from "../../lib/roles";
 
@@ -59,7 +58,6 @@ function formatStatus(status: string): string {
     hired: "Seleccionado",
     rejected: "Rechazado",
 
-    // ✅ NUEVOS post-trabajo
     completed_by_employer: "Completado por empleador",
     completed_by_worker: "Completado por barista",
     completed_confirmed: "Trabajo completado",
@@ -67,7 +65,6 @@ function formatStatus(status: string): string {
   return statusMap[status] || status;
 }
 
-// ✅ helper accordion
 function SectionHeader({
   title,
   open,
@@ -101,8 +98,6 @@ function SectionHeader({
   );
 }
 
-// ✅ Lógica de UI para completado (barista = worker)
-// AHORA recibe workerReviewed para ocultar reseña cuando corresponde
 function getCompletionUIForWorker(status: string, workerReviewed: boolean) {
   switch (status) {
     case "hired":
@@ -127,7 +122,6 @@ function getCompletionUIForWorker(status: string, workerReviewed: boolean) {
       };
 
     case "completed_confirmed":
-      // ✅ solo permitir reseña si aún no reseñó el worker
       if (workerReviewed) {
         return {
           showButton: false,
@@ -167,10 +161,8 @@ export default function JobsList() {
   const [applying, setApplying] = useState<Record<number, boolean>>({});
   const [togglingFav, setTogglingFav] = useState<Record<number, boolean>>({});
 
-  // ✅ NUEVO: loading por postulación al completar
   const [completing, setCompleting] = useState<Record<number, boolean>>({});
 
-  // ✅ NUEVO: acordeones abiertos/cerrados
   const [openMyApps, setOpenMyApps] = useState(true);
   const [openOffers, setOpenOffers] = useState(true);
 
@@ -184,12 +176,9 @@ export default function JobsList() {
       try {
         const jobOffers = await getAllJobOffers();
 
-        const filtered =
-          isBarista
-            ? jobOffers.filter(
-                (j) => j.is_active === 1 && j.status !== "CERRADO"
-              )
-            : jobOffers;
+        const filtered = isBarista
+          ? jobOffers.filter((j) => j.is_active === 1 && j.status !== "CERRADO")
+          : jobOffers;
 
         setOffers(filtered);
       } catch (err: any) {
@@ -243,7 +232,6 @@ export default function JobsList() {
     if (!u) return toast.push("Debes iniciar sesión para postular");
     if (!isBarista) return;
 
-    // ✅ VALIDAR PERFIL ANTES DE POSTULAR
     const role = normalizeRole(u) as any;
     const v = validateProfile(u, role);
 
@@ -270,7 +258,6 @@ export default function JobsList() {
       const apps = await getMyApplications(u.id);
       setMyApplications(apps);
 
-      // ✅ si estaba cerrado el accordion, lo abrimos para que vea su postulación
       setOpenMyApps(true);
     } catch (err: any) {
       console.error("Error al postular:", err);
@@ -321,15 +308,15 @@ export default function JobsList() {
     }
   }
 
-  // ✅ NUEVO: handler completar/confirmar/reseñar
   async function handleComplete(app: MyApplication) {
     if (!u) return;
 
     const workerReviewed = !!(app as any).worker_reviewed;
     const ui = getCompletionUIForWorker(app.status, workerReviewed);
 
+    // 👉 NUEVO: si el modo es "review", redirigimos a Mis Postulaciones
     if (ui.mode === "review") {
-      toast.push("Aquí se abrirá el formulario de reseña 🙂");
+      nav("/app/my-applications");
       return;
     }
 
@@ -343,7 +330,9 @@ export default function JobsList() {
       toast.push("Estado actualizado ✅");
     } catch (err: any) {
       console.error("Error completando postulación:", err);
-      toast.push(err.response?.data?.detail || err.message || "No se pudo actualizar.");
+      toast.push(
+        err.response?.data?.detail || err.message || "No se pudo actualizar."
+      );
     } finally {
       setCompleting((prev) => ({ ...prev, [app.id]: false }));
     }
@@ -378,7 +367,9 @@ export default function JobsList() {
 
           <div
             className={`grid transition-all duration-200 ease-in-out ${
-              openMyApps ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+              openMyApps
+                ? "grid-rows-[1fr] opacity-100"
+                : "grid-rows-[0fr] opacity-0"
             }`}
           >
             <div className="overflow-hidden">
@@ -392,14 +383,19 @@ export default function JobsList() {
                 <div className="grid gap-4 md:grid-cols-2 mt-2">
                   {myApplications.map((app) => {
                     const workerReviewed = !!(app as any).worker_reviewed;
-                    const completionUI = getCompletionUIForWorker(app.status, workerReviewed);
+                    const completionUI = getCompletionUIForWorker(
+                      app.status,
+                      workerReviewed
+                    );
 
                     return (
                       <Card key={app.id} className="p-5">
                         <div className="flex justify-between items-center">
                           <div>
                             <h3 className="font-medium">{app.job_title}</h3>
-                            <p className="text-sm text-gray-600">{app.company}</p>
+                            <p className="text-sm text-gray-600">
+                              {app.company}
+                            </p>
                           </div>
                           <span
                             className={`text-sm font-medium px-2 py-1 rounded ${
@@ -416,7 +412,8 @@ export default function JobsList() {
                           </span>
                         </div>
 
-                        {(completionUI.mode === "wait" || completionUI.mode === "done") && (
+                        {(completionUI.mode === "wait" ||
+                          completionUI.mode === "done") && (
                           <div className="mt-3 text-xs text-gray-600">
                             {completionUI.label}
                           </div>
@@ -425,7 +422,11 @@ export default function JobsList() {
                         {completionUI.showButton && (
                           <div className="mt-3">
                             <Button
-                              variant={completionUI.mode === "review" ? "primary" : "secondary"}
+                              variant={
+                                completionUI.mode === "review"
+                                  ? "primary"
+                                  : "secondary"
+                              }
                               disabled={!!completing[app.id]}
                               onClick={() => handleComplete(app)}
                             >
@@ -463,7 +464,9 @@ export default function JobsList() {
 
           <div
             className={`grid transition-all duration-200 ease-in-out ${
-              openOffers ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+              openOffers
+                ? "grid-rows-[1fr] opacity-100"
+                : "grid-rows-[0fr] opacity-0"
             }`}
           >
             <div className="overflow-hidden">
@@ -480,14 +483,21 @@ export default function JobsList() {
                     const isFav = favoriteOfferIds.has(job.id);
 
                     return (
-                      <Card key={job.id} className="p-0 overflow-hidden relative">
+                      <Card
+                        key={job.id}
+                        className="p-0 overflow-hidden relative"
+                      >
                         <button
                           type="button"
                           onClick={() => toggleFavoriteOffer(job.id)}
                           disabled={togglingFav[job.id]}
                           className="absolute top-3 right-3 z-10 text-2xl drop-shadow"
                           aria-label="Favorito"
-                          title={isFav ? "Quitar de favoritos" : "Agregar a favoritos"}
+                          title={
+                            isFav
+                              ? "Quitar de favoritos"
+                              : "Agregar a favoritos"
+                          }
                         >
                           {isFav ? "❤️" : "🤍"}
                         </button>
@@ -502,17 +512,25 @@ export default function JobsList() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <h2 className="font-medium">{job.title}</h2>
-                              <p className="text-sm text-gray-600">{job.company}</p>
+                              <p className="text-sm text-gray-600">
+                                {job.company}
+                              </p>
                               <p className="text-sm text-gray-600 mt-1">
                                 {job.location}
                               </p>
                             </div>
                             <div className="text-right flex-shrink-0">
                               <div className="font-semibold text-brand-600">
-                                {job.salary_range || "No especificado"}
+                                {job.salary_range != null
+                                  ? `$${job.salary_range.toLocaleString(
+                                      "es-CL"
+                                    )}`
+                                  : "No especificado"}
                               </div>
                               <div className="text-sm text-gray-500">
-                                {new Date(job.created_at).toLocaleDateString("es-CL")}
+                                {new Date(
+                                  job.created_at
+                                ).toLocaleDateString("es-CL")}
                               </div>
                             </div>
                           </div>

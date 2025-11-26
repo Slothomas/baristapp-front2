@@ -1,6 +1,15 @@
+// src/components/Notifications.tsx
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Trash2, CheckCircle2, X, Briefcase, User, Info } from "lucide-react"; // ✅ Se eliminó 'Filter'
+import {
+  Bell,
+  Trash2,
+  CheckCircle2,
+  X,
+  Briefcase,
+  User,
+  Info,
+} from "lucide-react";
 import {
   deleteNotification,
   getUserNotifications,
@@ -11,9 +20,12 @@ import { getCurrentUser } from "../api/auth";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // 🎨 DICCIONARIO DE TEXTOS E ICONOS
-const NOTIFICATION_CONFIG: Record<string, { title: string; icon: any; color: string }> = {
+const NOTIFICATION_CONFIG: Record<
+  string,
+  { title: string; icon: any; color: string }
+> = {
   BARISTA_APPLIED: {
-    title: "Nueva Postulación",
+    title: "Postulación enviada",
     icon: User,
     color: "text-blue-600 bg-blue-100",
   },
@@ -35,12 +47,16 @@ const NOTIFICATION_CONFIG: Record<string, { title: string; icon: any; color: str
 };
 
 function getNotificationDetails(n: Notification) {
-  // Validación segura para evitar errores si el tipo no existe
-  const typeKey = (n.type && NOTIFICATION_CONFIG[n.type]) ? n.type : "DEFAULT";
+  const typeKey =
+    n.type && NOTIFICATION_CONFIG[n.type] ? n.type : "DEFAULT";
   const config = NOTIFICATION_CONFIG[typeKey];
-  
+
   const title = n.title || config.title;
-  const message = n.message || (n.type === "BARISTA_APPLIED" ? "Un candidato ha postulado a tu oferta." : "Tienes una nueva actualización.");
+  const message =
+    n.message ||
+    (n.type === "BARISTA_APPLIED"
+      ? "Tu postulación se ha registrado correctamente."
+      : "Tienes una nueva actualización.");
 
   return { ...config, title, message };
 }
@@ -52,8 +68,8 @@ export default function Notifications() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  
-  // Estado para filtrar visualmente las leídas
+
+  // filtro visual "solo no leídas"
   const [showOnlyUnread, setShowOnlyUnread] = useState(false);
 
   useEffect(() => {
@@ -66,7 +82,7 @@ export default function Notifications() {
   );
 
   const {
-    data: list = [],
+    data: rawList = [],
     isLoading,
     isError,
     refetch,
@@ -77,15 +93,19 @@ export default function Notifications() {
     refetchInterval: 15000,
   });
 
-  const unreadCount = list.filter((n) => !n.is_read).length;
+  // 🔴 contador de alerta (todas las notis sin leer)
+  const unreadCount = rawList.filter((n) => !n.is_read).length;
 
-  // LÓGICA DE FILTRADO
+  // 📦 lista base que se mostrará (por ahora sin filtros por rol)
+  const baseList = rawList;
+
+  // LÓGICA DE FILTRADO (solo no leídas)
   const displayedList = useMemo(() => {
     if (showOnlyUnread) {
-      return list.filter((n) => !n.is_read);
+      return baseList.filter((n) => !n.is_read);
     }
-    return list;
-  }, [list, showOnlyUnread]);
+    return baseList;
+  }, [baseList, showOnlyUnread]);
 
   const markReadMut = useMutation({
     mutationFn: (id: number) => markNotificationAsRead(id),
@@ -152,7 +172,9 @@ export default function Notifications() {
                     <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-white"></span>
                   )}
                 </div>
-                <h3 className="font-bold text-lg text-gray-800">Notificaciones</h3>
+                <h3 className="font-bold text-lg text-gray-800">
+                  Notificaciones
+                </h3>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -165,11 +187,19 @@ export default function Notifications() {
             {/* Barra de Filtro */}
             <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg">
               <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
-                <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${showOnlyUnread ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300'}`}>
-                  {showOnlyUnread && <CheckCircle2 size={12} className="text-white" />}
+                <div
+                  className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${
+                    showOnlyUnread
+                      ? "bg-blue-500 border-blue-500"
+                      : "bg-white border-gray-300"
+                  }`}
+                >
+                  {showOnlyUnread && (
+                    <CheckCircle2 size={12} className="text-white" />
+                  )}
                 </div>
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   checked={showOnlyUnread}
                   onChange={(e) => setShowOnlyUnread(e.target.checked)}
                   className="hidden"
@@ -190,7 +220,7 @@ export default function Notifications() {
           <div className="flex-1 overflow-y-auto bg-gray-50/50">
             {isLoading && (
               <div className="p-10 flex flex-col items-center text-gray-400 animate-pulse">
-                <div className="h-8 w-8 bg-gray-200 rounded-full mb-3"></div>
+                <div className="h-8 w-8 bg-gray-200 rounded-full mb-3" />
                 <p className="text-sm">Cargando...</p>
               </div>
             )}
@@ -204,14 +234,18 @@ export default function Notifications() {
             {!isLoading && !isError && displayedList.length === 0 && (
               <div className="flex flex-col items-center justify-center h-64 text-gray-400">
                 <div className="bg-gray-100 p-4 rounded-full mb-3">
-                  {showOnlyUnread ? <CheckCircle2 size={32} className="opacity-20"/> : <Bell size={32} className="opacity-20" />}
+                  {showOnlyUnread ? (
+                    <CheckCircle2 size={32} className="opacity-20" />
+                  ) : (
+                    <Bell size={32} className="opacity-20" />
+                  )}
                 </div>
                 <p className="text-sm font-medium">
                   {showOnlyUnread ? "Todo al día" : "Bandeja vacía"}
                 </p>
                 <p className="text-xs mt-1 text-center px-6">
-                  {showOnlyUnread 
-                    ? "No tienes mensajes pendientes. Desactiva el filtro para ver el historial." 
+                  {showOnlyUnread
+                    ? "No tienes mensajes pendientes. Desactiva el filtro para ver el historial."
                     : "No hay notificaciones para mostrar."}
                 </p>
               </div>
@@ -220,33 +254,51 @@ export default function Notifications() {
             {!isLoading && !isError && displayedList.length > 0 && (
               <ul className="divide-y divide-gray-100">
                 {displayedList.map((n) => {
-                  const { title, message, icon: Icon, color } = getNotificationDetails(n);
-                  
+                  const { title, message, icon: Icon, color } =
+                    getNotificationDetails(n);
+
                   return (
                     <li
                       key={n.id}
                       className={`group relative p-4 transition-all duration-200 hover:bg-white hover:shadow-sm ${
-                        n.is_read ? "bg-gray-50 opacity-75 grayscale-[0.3]" : "bg-white border-l-4 border-blue-500"
+                        n.is_read
+                          ? "bg-gray-50 opacity-75 grayscale-[0.3]"
+                          : "bg-white border-l-4 border-blue-500"
                       }`}
                     >
                       <div className="flex gap-3">
-                        <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${color}`}>
+                        <div
+                          className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${color}`}
+                        >
                           <Icon size={18} />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
-                            <h4 className={`text-sm font-semibold mb-0.5 truncate pr-2 ${n.is_read ? 'text-gray-600' : 'text-gray-900'}`}>
+                            <h4
+                              className={`text-sm font-semibold mb-0.5 truncate pr-2 ${
+                                n.is_read
+                                  ? "text-gray-600"
+                                  : "text-gray-900"
+                              }`}
+                            >
                               {title}
                             </h4>
                             <span className="text-[10px] font-medium text-gray-400 whitespace-nowrap bg-gray-100 px-1.5 py-0.5 rounded">
-                              {new Date(n.created_at).toLocaleDateString("es-CL", { day: 'numeric', month: 'short' })}
+                              {new Date(
+                                n.created_at
+                              ).toLocaleDateString("es-CL", {
+                                day: "numeric",
+                                month: "short",
+                              })}
                             </span>
                           </div>
 
-                          <p 
+                          <p
                             className="text-sm text-gray-600 leading-snug mb-2 line-clamp-2 cursor-pointer"
-                            onClick={() => !n.is_read && markReadMut.mutate(n.id)}
+                            onClick={() =>
+                              !n.is_read && markReadMut.mutate(n.id)
+                            }
                           >
                             {message}
                           </p>
@@ -287,15 +339,13 @@ export default function Notifications() {
       <div className="relative">
         <button
           onClick={handleOpen}
-          className={`relative p-2 rounded-full transition-all duration-200 ${
-            open ? 'bg-blue-50 text-blue-600 ring-2 ring-blue-100' : 'hover:bg-gray-100 text-gray-600'
-          }`}
+          className="relative p-2 rounded-full transition-all duration-200 hover:bg-white/10 text-white"
         >
           <Bell size={20} />
           {unreadCount > 0 && (
             <span className="absolute top-0.5 right-0.5 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
             </span>
           )}
         </button>

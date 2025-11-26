@@ -6,9 +6,7 @@ import { http } from "./http";
 // ---------------------------------------------------------------------------
 
 export type JobType = "FULL_TIME" | "PART_TIME" | "REPLACEMENT" | "URGENT";
-
 export type UrgencyType = "NORMAL" | "URGENT";
-
 export type JobOfferStatus = "PUBLICADO" | "PAUSADO" | "CERRADO";
 
 // ---------------------------------------------------------------------------
@@ -23,7 +21,8 @@ export interface JobOffer {
   job_type: JobType;
   description: string;
 
-  salary_range?: string | null;
+  salary_range?: number | null;
+
   requirements?: string | null;
   required_skills?: string | null;
 
@@ -42,7 +41,6 @@ export interface JobOffer {
   vacancies_filled: number;
   vacancies_total: number;
 
-  // ⚡ NUEVOS CAMPOS MULTI-LOCAL
   business_id?: number | null;
   location_id?: number | null;
 
@@ -62,7 +60,8 @@ export interface JobOfferCreatePayload {
   job_type: JobType;
   description: string;
 
-  salary_range?: string | null;
+  salary_range?: number | null;
+
   requirements?: string | null;
   required_skills?: string | null;
 
@@ -76,7 +75,6 @@ export interface JobOfferCreatePayload {
 
   vacancies_total?: number;
 
-  // ⚡ NUEVO
   business_id?: number | null;
   location_id?: number | null;
 }
@@ -88,7 +86,8 @@ export interface JobOfferUpdatePayload {
   job_type?: JobType;
 
   description?: string;
-  salary_range?: string | null;
+
+  salary_range?: number | null;
 
   requirements?: string | null;
   required_skills?: string | null;
@@ -103,7 +102,6 @@ export interface JobOfferUpdatePayload {
   status?: JobOfferStatus;
   is_active?: number;
 
-  // ⚡ NUEVO
   business_id?: number | null;
   location_id?: number | null;
 }

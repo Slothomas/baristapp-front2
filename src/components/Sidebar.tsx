@@ -1,4 +1,5 @@
 // src/components/Sidebar.tsx
+
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -9,7 +10,8 @@ import {
   Shield,
   LifeBuoy,
   FileClock,
-  Star,   // ⭐ Nuevo ícono
+  Star,
+  KeyRound, // 🔑 nuevo ícono
 } from "lucide-react";
 import { getUserMock } from "../api/auth";
 
@@ -24,7 +26,12 @@ function normalizeRole(user: any): AppRole {
 
   if (raw === "barista" || raw === "worker" || raw === "freelancer")
     return "barista";
-  if (raw === "cafe" || raw === "client" || raw === "restaurant" || raw === "cafeteria")
+  if (
+    raw === "cafe" ||
+    raw === "client" ||
+    raw === "restaurant" ||
+    raw === "cafeteria"
+  )
     return "cafe";
   if (raw === "academy" || raw === "escuela" || raw === "training_center")
     return "academy";
@@ -41,16 +48,21 @@ export default function Sidebar() {
   const active = ({ isActive }: { isActive: boolean }) =>
     (isActive ? "bg-gray-100 font-semibold " : "") + item;
 
+  const dashboardPath =
+    role === "admin" ? "/app/admin/dashboard" : "/app";
+
   return (
     <aside className="hidden md:block w-56 shrink-0 bg-white border-r relative z-10 pointer-events-none">
       <div className="sticky top-[56px] p-3 pointer-events-auto relative z-20">
         <div className="pointer-events-auto">
           <nav className="space-y-1">
-            <NavLink to="/app" className={active}>
+            {/* DASHBOARD dinámico */}
+            <NavLink to={dashboardPath} className={active}>
               <LayoutDashboard size={18} />
               Dashboard
             </NavLink>
 
+            {/* Vacantes */}
             <NavLink to="/app/jobs" className={active}>
               <Briefcase size={18} />
               Vacantes
@@ -89,11 +101,19 @@ export default function Sidebar() {
               </NavLink>
             )}
 
+            {/* PERFIL */}
             <NavLink to="/app/profile" className={active}>
               <User size={18} />
               Perfil
             </NavLink>
 
+            {/* NUEVO: Cambiar contraseña */}
+            <NavLink to="/app/change-password" className={active}>
+              <KeyRound size={18} />
+              Cambiar contraseña
+            </NavLink>
+
+            {/* ADMIN */}
             {role === "admin" && (
               <NavLink to="/app/admin/users" className={active}>
                 <Shield size={18} />
@@ -101,6 +121,7 @@ export default function Sidebar() {
               </NavLink>
             )}
 
+            {/* SOPORTE */}
             <NavLink to="/app/support" className={active}>
               <LifeBuoy size={18} />
               Soporte
