@@ -1,4 +1,3 @@
-// src/api/gigPayments.ts
 import { http } from "./http";
 
 export interface GigPayment {
@@ -23,19 +22,14 @@ export interface GigPayment {
   paid_at: string | null;
 }
 
-const API_BASE =
-  import.meta.env.DEV
-    ? "http://127.0.0.1:8000" // local
-    : "https://baristappback-axg6grb2ahaffnby.canadacentral-01.azurewebsites.net"; // prod SIEMPRE https
-
 export async function getGigPayments(params?: {
   barista_id?: number;
   business_id?: number;
   date_from?: string;
   date_to?: string;
 }): Promise<GigPayment[]> {
-  const url = `${API_BASE}/gig-payments`;
-
-  const res = await http.get<GigPayment[]>(url, { params });
+  
+  const res = await http.get<GigPayment[]>('/gig-payments', { params });
+  
   return res.data;
 }
