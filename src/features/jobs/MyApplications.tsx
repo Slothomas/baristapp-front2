@@ -47,6 +47,12 @@ const statusUIMap: Record<string, { label: string; cls: string }> = {
   APPLIED: { label: "Pendiente", cls: "bg-yellow-100 text-yellow-800" },
   ACCEPTED: { label: "Seleccionado", cls: "bg-green-100 text-green-800" },
   DECLINED: { label: "Rechazado", cls: "bg-red-100 text-red-800" },
+
+  // nuevo estado cuando el turno ya se completó y confirmó
+  COMPLETED_CONFIRMED: {
+    label: "Trabajo completado",
+    cls: "bg-emerald-100 text-emerald-800",
+  },
 };
 
 const rejectionReasonMap: Record<string, string> = {
@@ -161,6 +167,7 @@ export default function MyApplications() {
   }, [userId, toast]);
 
   // Si viene ?app=ID en la URL, abrir automáticamente el formulario de reseña
+  // solo si la postulación está completada y confirmada
   useEffect(() => {
     if (!highlightAppId) return;
     if (!applications.length) return;
@@ -168,14 +175,11 @@ export default function MyApplications() {
     const app = applications.find((a) => a.id === highlightAppId);
     if (!app) return;
 
-    // Debe existir assignment (trabajo completado)
-    const hasAssignment = assignments.some(
-      (asg) => asg.job_offer_id === app.job_offer_id
-    );
-    if (!hasAssignment) return;
+    const rawStatus = String(app.status ?? "").trim().toUpperCase();
+    if (rawStatus !== "COMPLETED_CONFIRMED") return;
 
     setReviewAppId(highlightAppId);
-  }, [highlightAppId, applications, assignments]);
+  }, [highlightAppId, applications]);
 
   async function openOffer(jobOfferId: number) {
     try {
@@ -221,15 +225,19 @@ export default function MyApplications() {
             );
 
             const rawStatus = String(app.status ?? "").trim().toUpperCase();
+            const isCompleted = rawStatus === "COMPLETED_CONFIRMED";
+
             const st = statusUIMap[rawStatus] ?? {
               label: rawStatus || "Pendiente",
               cls: "bg-gray-100 text-gray-700",
             };
 
-            const estadoFinal = assignment
-              ? "Contratado"
-              : rawStatus === "HIRED"
+            const estadoFinal = isCompleted
+              ? "Trabajo completado"
+              : rawStatus === "HIRED" || rawStatus === "ACCEPTED"
               ? "Seleccionado"
+              : rawStatus === "REJECTED" || rawStatus === "DECLINED"
+              ? "Rechazado"
               : st.label;
 
             // reseña del empleador hacia este barista, ligada a ESTA postulación
@@ -316,7 +324,7 @@ export default function MyApplications() {
                           </div>
                         )}
                       </div>
-                    ) : assignment ? (
+                    ) : isCompleted ? (
                       <div className="p-3 rounded-xl border bg-gray-50">
                         <div className="font-semibold text-gray-800">
                           Trabajo finalizado ✅
@@ -420,7 +428,7 @@ export default function MyApplications() {
                       </Button>
                     )}
 
-                    {assignment && job && (
+                    {isCompleted && job && (
                       <Button
                         variant="secondary"
                         onClick={() =>
@@ -438,7 +446,7 @@ export default function MyApplications() {
                 </div>
 
                 {/* Form evaluación */}
-                {assignment && reviewAppId === app.id && job && (
+                {isCompleted && reviewAppId === app.id && job && (
                   <div className="px-4 pb-4">
                     <div className="border-t pt-4">
                       <ReviewForm
